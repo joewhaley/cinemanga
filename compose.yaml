@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cinemanga-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+      - /app/.venv
+    environment:
+      - PORT=${BACKEND_PORT:-8000}
+      - DEBUG=${DEBUG:-true}
+    env_file:
+      - .env
+    command: python -m uvicorn main:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload

@@ -13,8 +13,26 @@ class PanelInstruction(TypedDict):
     style: str
 
 def generate_comic(script: str, style: str) -> list[dict]:
-    panels = generate_panel_instructions(script, style)
-    comic = generate_comic(panels)
+    panel_instructions = generate_panel_instructions(script, style)
+    comic = []
+    prev_image = None
+    
+    for instruction in panel_instructions:
+        # Add previous image to current instruction if available
+        if prev_image:
+            instruction["prev_image"] = prev_image
+        
+        # Generate panel
+        panel_result = generate_panels(instruction)
+        comic.append(panel_result)
+        
+        # Store current panel's image for next iteration
+        if "image_data" in panel_result and "mime_type" in panel_result:
+            prev_image = {
+                "data": panel_result["image_data"],
+                "mime_type": panel_result["mime_type"]
+            }
+    
     return comic
 
 def generate_panel_instructions(script: str, style: str) -> list[PanelInstruction]:

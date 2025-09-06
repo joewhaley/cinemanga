@@ -1,0 +1,11 @@
+1
+00:00:00,500 --> 00:00:02,300
+This is the first caption.
+
+2
+00:00:02,500 --> 00:00:05,000
+This is the second caption with more text.
+
+3
+00:00:05,200 --> 00:00:07,800
+Final caption for testing purposes.

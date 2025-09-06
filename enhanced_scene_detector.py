@@ -17,7 +17,7 @@ except ImportError:
 
 # Import our custom modules
 from google_scene_detector import GoogleSceneDetector
-from fal_scene_detector import FALSceneDetector
+from backend.modules.fal_scene_detector import FALSceneDetector
 
 class EnhancedSceneDetector:
     """Enhanced scene detector combining multiple AI services and computer vision"""

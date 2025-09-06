@@ -33,7 +33,7 @@ def test_fal_availability():
     
     # Test FALSceneDetector initialization
     try:
-        from fal_scene_detector import FALSceneDetector
+        from backend.modules.fal_scene_detector import FALSceneDetector
         detector = FALSceneDetector()
         print("✅ FALSceneDetector initialized successfully")
         return True

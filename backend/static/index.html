@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Scene Detection</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const API_BASE = '';
+
+        // Main App Component
+        function App() {
+            const [currentPage, setCurrentPage] = useState('upload');
+            const [resultId, setResultId] = useState(null);
+            const [analysisResult, setAnalysisResult] = useState(null);
+
+            const handleResultReady = (id) => {
+                setResultId(id);
+                setCurrentPage('results');
+            };
+
+            const handleBackToUpload = () => {
+                setCurrentPage('upload');
+                setResultId(null);
+                setAnalysisResult(null);
+            };
+
+            return (
+                <div className="min-h-screen">
+                    {currentPage === 'upload' && (
+                        <UploadPage onResultReady={handleResultReady} />
+                    )}
+                    {currentPage === 'results' && resultId && (
+                        <ResultsPage 
+                            resultId={resultId} 
+                            onBack={handleBackToUpload}
+                            analysisResult={analysisResult}
+                            setAnalysisResult={setAnalysisResult}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        // Upload Page Component
+        function UploadPage({ onResultReady }) {
+            const [activeTab, setActiveTab] = useState('file');
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [processingStatus, setProcessingStatus] = useState('');
+            const [file, setFile] = useState(null);
+            const [videoUrl, setVideoUrl] = useState('');
+
+            const handleFileUpload = async (event) => {
+                event.preventDefault();
+                if (!file) return;
+
+                setIsProcessing(true);
+                setProcessingStatus('Uploading video...');
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const response = await fetch(`${API_BASE}/api/upload`, {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+
+                    const result = await response.json();
+                    setProcessingStatus('Processing started...');
+                    
+                    // Start polling for status
+                    pollStatus(result.result_id, onResultReady);
+                } catch (error) {
+                    setProcessingStatus(`Error: ${error.message}`);
+                    setIsProcessing(false);
+                }
+            };
+
+            const handleUrlSubmit = async (event) => {
+                event.preventDefault();
+                if (!videoUrl.trim()) return;
+
+                setIsProcessing(true);
+                setProcessingStatus('Processing URL...');
+
+                try {
+                    const response = await fetch(`${API_BASE}/api/process-url`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ url: videoUrl }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('URL processing failed');
+                    }
+
+                    const result = await response.json();
+                    setProcessingStatus('Processing started...');
+                    
+                    // Start polling for status
+                    pollStatus(result.result_id, onResultReady);
+                } catch (error) {
+                    setProcessingStatus(`Error: ${error.message}`);
+                    setIsProcessing(false);
+                }
+            };
+
+            const pollStatus = async (resultId, onResultReady) => {
+                const poll = async () => {
+                    try {
+                        const response = await fetch(`${API_BASE}/api/status/${resultId}`);
+                        const status = await response.json();
+                        
+                        setProcessingStatus(status.message);
+                        
+                        if (status.status === 'completed') {
+                            setIsProcessing(false);
+                            onResultReady(resultId);
+                        } else if (status.status === 'error') {
+                            setIsProcessing(false);
+                            setProcessingStatus(`Error: ${status.message}`);
+                        } else {
+                            // Continue polling
+                            setTimeout(poll, 2000);
+                        }
+                    } catch (error) {
+                        setIsProcessing(false);
+                        setProcessingStatus(`Error checking status: ${error.message}`);
+                    }
+                };
+                poll();
+            };
+
+            return (
+                <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl card-hover fade-in">
+                        <div className="text-center mb-8">
+                            <h1 className="text-4xl font-bold text-gray-800 mb-2">
+                                <i className="fas fa-video text-blue-600 mr-3"></i>
+                                Video Scene Detection
+                            </h1>
+                            <p className="text-gray-600 text-lg">
+                                Upload a video file or provide a URL to analyze scenes using AI
+                            </p>
+                        </div>
+
+                        {/* Tab Navigation */}
+                        <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
+                            <button
+                                onClick={() => setActiveTab('file')}
+                                className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
+                                    activeTab === 'file'
+                                        ? 'bg-white text-blue-600 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-800'
+                                }`}
+                            >
+                                <i className="fas fa-upload mr-2"></i>
+                                Upload File
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('url')}
+                                className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
+                                    activeTab === 'url'
+                                        ? 'bg-white text-blue-600 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-800'
+                                }`}
+                            >
+                                <i className="fas fa-link mr-2"></i>
+                                Video URL
+                            </button>
+                        </div>
+
+                        {/* File Upload Tab */}
+                        {activeTab === 'file' && (
+                            <form onSubmit={handleFileUpload} className="space-y-6">
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+                                    <input
+                                        type="file"
+                                        accept="video/*,.mkv"
+                                        onChange={(e) => setFile(e.target.files[0])}
+                                        className="hidden"
+                                        id="file-upload"
+                                        disabled={isProcessing}
+                                    />
+                                    <label htmlFor="file-upload" className="cursor-pointer">
+                                        <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                                        <p className="text-lg font-medium text-gray-700 mb-2">
+                                            {file ? file.name : 'Click to select video file'}
+                                        </p>
+                                        <p className="text-sm text-gray-500">
+                                            Supports MP4, AVI, MOV, MKV, WebM, and other video formats
+                                        </p>
+                                    </label>
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={!file || isProcessing}
+                                    className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <i className="fas fa-spinner loading-spinner mr-2"></i>
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fas fa-play mr-2"></i>
+                                            Analyze Video
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+                        )}
+
+                        {/* URL Tab */}
+                        {activeTab === 'url' && (
+                            <form onSubmit={handleUrlSubmit} className="space-y-6">
+                                <div>
+                                    <label htmlFor="video-url" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Video URL
+                                    </label>
+                                    <input
+                                        type="url"
+                                        id="video-url"
+                                        value={videoUrl}
+                                        onChange={(e) => setVideoUrl(e.target.value)}
+                                        placeholder="https://www.youtube.com/watch?v=..."
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={isProcessing}
+                                    />
+                                    <p className="text-sm text-gray-500 mt-2">
+                                        Enter a YouTube URL or direct video link
+                                    </p>
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={!videoUrl.trim() || isProcessing}
+                                    className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <i className="fas fa-spinner loading-spinner mr-2"></i>
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fas fa-play mr-2"></i>
+                                            Analyze Video
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+                        )}
+
+                        {/* Processing Status */}
+                        {isProcessing && (
+                            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center">
+                                    <i className="fas fa-spinner loading-spinner text-blue-600 mr-3"></i>
+                                    <span className="text-blue-800 font-medium">{processingStatus}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Results Page Component
+        function ResultsPage({ resultId, onBack, analysisResult, setAnalysisResult }) {
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            useEffect(() => {
+                fetchResults();
+            }, [resultId]);
+
+            const fetchResults = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/api/results/${resultId}`);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch results');
+                    }
+                    const result = await response.json();
+                    setAnalysisResult(result);
+                    setLoading(false);
+                } catch (err) {
+                    setError(err.message);
+                    setLoading(false);
+                }
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen gradient-bg flex items-center justify-center">
+                        <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
+                            <i className="fas fa-spinner loading-spinner text-4xl text-blue-600 mb-4"></i>
+                            <p className="text-lg text-gray-700">Loading analysis results...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (error) {
+                return (
+                    <div className="min-h-screen gradient-bg flex items-center justify-center">
+                        <div className="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-md">
+                            <i className="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+                            <h2 className="text-xl font-bold text-gray-800 mb-2">Error</h2>
+                            <p className="text-gray-600 mb-6">{error}</p>
+                            <button
+                                onClick={onBack}
+                                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                                Back to Upload
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {/* Header */}
+                    <div className="gradient-bg text-white py-6">
+                        <div className="max-w-6xl mx-auto px-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h1 className="text-3xl font-bold mb-2">
+                                        <i className="fas fa-chart-line mr-3"></i>
+                                        Analysis Results
+                                    </h1>
+                                    <p className="text-blue-100">{analysisResult.video_name}</p>
+                                </div>
+                                <button
+                                    onClick={onBack}
+                                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-6 py-2 rounded-lg transition-colors"
+                                >
+                                    <i className="fas fa-arrow-left mr-2"></i>
+                                    Back to Upload
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Results Content */}
+                    <div className="max-w-6xl mx-auto px-4 py-8">
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            <div className="bg-white rounded-xl shadow-lg p-6 card-hover">
+                                <div className="flex items-center">
+                                    <div className="bg-blue-100 p-3 rounded-lg">
+                                        <i className="fas fa-video text-blue-600 text-xl"></i>
+                                    </div>
+                                    <div className="ml-4">
+                                        <p className="text-sm text-gray-600">Video</p>
+                                        <p className="text-lg font-semibold text-gray-800">
+                                            {analysisResult.video_name}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-xl shadow-lg p-6 card-hover">
+                                <div className="flex items-center">
+                                    <div className="bg-green-100 p-3 rounded-lg">
+                                        <i className="fas fa-scene text-green-600 text-xl"></i>
+                                    </div>
+                                    <div className="ml-4">
+                                        <p className="text-sm text-gray-600">Scenes Detected</p>
+                                        <p className="text-lg font-semibold text-gray-800">
+                                            {analysisResult.total_scenes}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-xl shadow-lg p-6 card-hover">
+                                <div className="flex items-center">
+                                    <div className="bg-purple-100 p-3 rounded-lg">
+                                        <i className="fas fa-brain text-purple-600 text-xl"></i>
+                                    </div>
+                                    <div className="ml-4">
+                                        <p className="text-sm text-gray-600">Analyses</p>
+                                        <p className="text-lg font-semibold text-gray-800">
+                                            {analysisResult.analysis_results.total_analyses}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Analysis Results */}
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                                <i className="fas fa-microscope mr-3 text-blue-600"></i>
+                                Detailed Analysis
+                            </h2>
+
+                            {analysisResult.analysis_results.analyses.map((analysis, index) => (
+                                <div key={index} className="bg-white rounded-xl shadow-lg p-6 card-hover fade-in">
+                                    <div className="flex items-start justify-between mb-4">
+                                        <h3 className="text-lg font-semibold text-gray-800 flex-1">
+                                            Analysis {index + 1}
+                                        </h3>
+                                        <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                                            {new Date(analysis.timestamp * 1000).toLocaleString()}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="mb-4">
+                                        <h4 className="text-sm font-medium text-gray-600 mb-2">Prompt:</h4>
+                                        <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">
+                                            {analysis.prompt}
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="text-sm font-medium text-gray-600 mb-2">Analysis:</h4>
+                                        <div className="prose max-w-none">
+                                            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                                {analysis.analysis}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Extracted Scenes */}
+                        {analysisResult.extracted_scenes.length > 0 && (
+                            <div className="mt-8">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                                    <i className="fas fa-clock mr-3 text-green-600"></i>
+                                    Extracted Scenes
+                                </h2>
+                                
+                                <div className="space-y-4">
+                                    {analysisResult.extracted_scenes.map((scene, index) => (
+                                        <div key={index} className="bg-white rounded-xl shadow-lg p-6 card-hover fade-in">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h3 className="text-lg font-semibold text-gray-800">
+                                                    Scene {index + 1}
+                                                </h3>
+                                                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                                                    {Math.floor(scene.timestamp / 60)}:{(scene.timestamp % 60).toString().padStart(2, '0')}
+                                                </span>
+                                            </div>
+                                            <p className="text-gray-700 leading-relaxed">
+                                                {scene.description}
+                                            </p>
+                                            <p className="text-sm text-gray-500 mt-2">
+                                                Source: {scene.source_analysis}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>

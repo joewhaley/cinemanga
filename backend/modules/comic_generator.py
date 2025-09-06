@@ -10,8 +10,9 @@ from google import genai
 from google.genai import types
 import fal_client
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future, as_completed
 import threading
+import time
 from modules.movie_generator import generate_movie_from_panels
 
 class ImageData(TypedDict):
@@ -22,70 +23,74 @@ class PanelInstruction(TypedDict):
     prev_image: Optional[ImageData]
     instructions: str  # This will be the end state (existing behavior)
     init_state_instructions: str  # New: starting state for motion
+    narrative: str  # Short narrative/dialogue for this panel
     style: str
 
 def generate_comic(script: str, style: str) -> list[dict]:
+    start_time = time.time()
+    
     # Generate panel instructions first
+    print("Generating panel instructions...")
     panel_instructions = generate_panel_instructions(script, style)
     
     if not panel_instructions:
         return {"error": "Failed to generate panel instructions", "panels": []}
     
-    comic = []
-    prev_image = None
+    print(f"Generated {len(panel_instructions)} panel instructions")
     
-    # Create output directory for storing images
+    # Create output directory
     output_base = Path("./output")
     output_base.mkdir(exist_ok=True)
-    
-    # Create timestamped directory for this comic
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = output_base / f"comic_{timestamp}"
     output_dir.mkdir(exist_ok=True)
-    print(f"Saving panels to: {output_dir}")
+    print(f"Output directory: {output_dir}")
     
-    # List to store movie generation tasks
-    movie_tasks = []
-    executor = ThreadPoolExecutor(max_workers=5)  # Allow up to 5 concurrent movie generations
+    comic = []
+    prev_image = None
+    movie_futures = []
     
-    for index, instruction in enumerate(panel_instructions):
-        print(f"Generating panel {index + 1}/{len(panel_instructions)}...")
+    # Thread pool for parallel movie generation
+    with ThreadPoolExecutor(max_workers=10) as executor:
         
-        # Prepare response data
-        response_data = {
-            "panel_number": index + 1,
-            "instructions": instruction["instructions"],  # End state
-            "init_state_instructions": instruction.get("init_state_instructions", instruction["instructions"]),
-            "style": instruction["style"]
-        }
-        
-        # Generate INIT STATE image first
-        print(f"  Generating init state for panel {index + 1}...")
-        init_instruction = dict(instruction)
-        init_instruction["instructions"] = instruction["init_state_instructions"]  # Use init state as main instruction
-        
-        # Use previous image (which could be previous panel's end state) as reference
-        if prev_image:
-            init_instruction["prev_image"] = prev_image
-            init_instruction["instructions"] = f"Continue from previous image. {init_instruction['instructions']}"
-        
-        init_saved = False
-        init_result = None
-        max_generation_retries = 5
-        
-        # Generate and save init state
-        for attempt in range(1, max_generation_retries + 1):
-            try:
-                if attempt > 1:
-                    print(f"  Retrying init state generation (attempt {attempt}/{max_generation_retries})...")
-                
-                init_result = generate_panels(init_instruction)
-                
-                if "image_data" in init_result and "mime_type" in init_result:
-                    file_extension = mimetypes.guess_extension(init_result["mime_type"]) or ".png"
-                    init_path = output_dir / f"panel_{index + 1:03d}_init{file_extension}"
+        # SEQUENTIAL image generation to maintain continuity
+        for index, instruction in enumerate(panel_instructions):
+            panel_num = index + 1
+            print(f"\nGenerating panel {panel_num}/{len(panel_instructions)}...")
+            
+            result = {
+                "panel_number": panel_num,
+                "instructions": instruction["instructions"],
+                "init_state_instructions": instruction.get("init_state_instructions", instruction["instructions"]),
+                "narrative": instruction.get("narrative", ""),
+                "style": instruction["style"],
+                "status": "processing"
+            }
+            
+            # Generate INIT STATE
+            print(f"  Generating init state...")
+            init_instruction = dict(instruction)
+            init_instruction["instructions"] = instruction["init_state_instructions"]
+            
+            if prev_image:
+                init_instruction["prev_image"] = prev_image
+                init_instruction["instructions"] = f"Continue from previous image. {init_instruction['instructions']}"
+            
+            init_result = None
+            init_saved = False
+            max_retries = 5
+            
+            for attempt in range(1, max_retries + 1):
+                try:
+                    if attempt > 1:
+                        print(f"    Retrying init state (attempt {attempt}/{max_retries})...")
                     
-                    try:
+                    init_result = generate_panels(init_instruction)
+                    
+                    if "image_data" in init_result and "mime_type" in init_result:
+                        file_ext = mimetypes.guess_extension(init_result["mime_type"]) or ".png"
+                        init_path = output_dir / f"panel_{panel_num:03d}_init{file_ext}"
+                        
                         with open(init_path, "wb") as f:
                             f.write(init_result["image_data"])
                         
@@ -93,51 +98,46 @@ def generate_comic(script: str, style: str) -> list[dict]:
                             with open(init_path, "rb") as f:
                                 saved_data = f.read()
                                 if len(saved_data) == len(init_result["image_data"]):
-                                    print(f"  Init state saved to {init_path}")
-                                    response_data["init_state_path"] = str(init_path)
+                                    print(f"    Init state saved: {init_path.name}")
+                                    result["init_state_path"] = str(init_path)
                                     init_saved = True
-                                    
-                                    # Update prev_image to init state for the end state generation
+                                    # Update prev_image to init for end state generation
                                     prev_image = {
                                         "data": init_result["image_data"],
                                         "mime_type": init_result["mime_type"]
                                     }
                                     break
-                    except IOError as e:
-                        print(f"  IO Error saving init state: {str(e)}")
-                        if attempt >= max_generation_retries:
-                            raise
-            except Exception as e:
-                print(f"  Error generating init state (attempt {attempt}): {str(e)}")
-                if attempt >= max_generation_retries:
-                    response_data["init_state_error"] = str(e)
-        
-        # Generate END STATE image using current prev_image (which is now the init state)
-        print(f"  Generating end state for panel {index + 1}...")
-        end_instruction = dict(instruction)
-        
-        # Use the current prev_image which should be the init state if it was generated successfully
-        if prev_image:
-            end_instruction["prev_image"] = prev_image
+                except Exception as e:
+                    print(f"    Init state error (attempt {attempt}): {str(e)}")
+                    if attempt >= max_retries:
+                        result["init_state_error"] = str(e)
+            
+            if not init_saved:
+                result["status"] = "error"
+                result["error"] = "Failed to generate init state"
+                comic.append(result)
+                continue
+            
+            # Generate END STATE using init as reference
+            print(f"  Generating end state...")
+            end_instruction = dict(instruction)
+            end_instruction["prev_image"] = prev_image  # Use init state as reference
             end_instruction["instructions"] = f"Continue from this exact scene with minimal change. {end_instruction['instructions']}"
-        
-        end_saved = False
-        end_image_data = None
-        end_mime_type = None
-        
-        # Generate and save end state
-        for attempt in range(1, max_generation_retries + 1):
-            try:
-                if attempt > 1:
-                    print(f"  Retrying end state generation (attempt {attempt}/{max_generation_retries})...")
-                
-                end_result = generate_panels(end_instruction)
-                
-                if "image_data" in end_result and "mime_type" in end_result:
-                    file_extension = mimetypes.guess_extension(end_result["mime_type"]) or ".png"
-                    end_path = output_dir / f"panel_{index + 1:03d}_end{file_extension}"
+            
+            end_result = None
+            end_saved = False
+            
+            for attempt in range(1, max_retries + 1):
+                try:
+                    if attempt > 1:
+                        print(f"    Retrying end state (attempt {attempt}/{max_retries})...")
                     
-                    try:
+                    end_result = generate_panels(end_instruction)
+                    
+                    if "image_data" in end_result and "mime_type" in end_result:
+                        file_ext = mimetypes.guess_extension(end_result["mime_type"]) or ".png"
+                        end_path = output_dir / f"panel_{panel_num:03d}_end{file_ext}"
+                        
                         with open(end_path, "wb") as f:
                             f.write(end_result["image_data"])
                         
@@ -145,94 +145,80 @@ def generate_comic(script: str, style: str) -> list[dict]:
                             with open(end_path, "rb") as f:
                                 saved_data = f.read()
                                 if len(saved_data) == len(end_result["image_data"]):
-                                    print(f"  End state saved to {end_path}")
-                                    response_data["end_state_path"] = str(end_path)
-                                    response_data["file_path"] = str(end_path)  # Main file path points to end state
+                                    print(f"    End state saved: {end_path.name}")
+                                    result["end_state_path"] = str(end_path)
+                                    result["file_path"] = str(end_path)
                                     end_saved = True
-                                    end_image_data = end_result["image_data"]
-                                    end_mime_type = end_result["mime_type"]
+                                    # Update prev_image to end state for next panel
+                                    prev_image = {
+                                        "data": end_result["image_data"],
+                                        "mime_type": end_result["mime_type"]
+                                    }
                                     break
-                    except IOError as e:
-                        print(f"  IO Error saving end state: {str(e)}")
-                        if attempt >= max_generation_retries:
-                            raise
-            except Exception as e:
-                print(f"  Error generating end state (attempt {attempt}): {str(e)}")
-                if attempt >= max_generation_retries:
-                    response_data["end_state_error"] = str(e)
-        
-        # Update prev_image to end state for next panel's init state
-        # This creates the chain: init -> end -> next panel's init -> next panel's end
-        if end_saved and end_image_data:
-            prev_image = {
-                "data": end_image_data,
-                "mime_type": end_mime_type
-            }
-        
-        # Set overall status
-        if init_saved and end_saved:
-            response_data["status"] = "success"
+                except Exception as e:
+                    print(f"    End state error (attempt {attempt}): {str(e)}")
+                    if attempt >= max_retries:
+                        result["end_state_error"] = str(e)
             
-            # Schedule movie generation asynchronously if both states were saved
-            if "init_state_path" in response_data and "end_state_path" in response_data:
-                print(f"  Scheduling movie generation for panel {index + 1}...")
-                
-                # Submit movie generation task to thread pool
+            if not end_saved:
+                result["status"] = "partial_success"
+                result["error"] = "Failed to generate end state"
+            else:
+                result["status"] = "success"
+            
+            # Submit movie generation to thread pool IMMEDIATELY after both states are ready
+            if init_saved and end_saved:
+                print(f"  Submitting movie generation to parallel queue...")
                 movie_future = executor.submit(
                     generate_movie_from_panels,
-                    response_data["init_state_path"],
-                    response_data["end_state_path"],
-                    instruction["instructions"],  # Motion description
-                    str(output_dir / f"panel_{index + 1:03d}_movie.mp4")
+                    result["init_state_path"],
+                    result["end_state_path"],
+                    instruction["instructions"],
+                    str(output_dir / f"panel_{panel_num:03d}_movie.mp4")
                 )
-                
-                # Store task info
-                movie_tasks.append({
-                    "panel_number": index + 1,
-                    "future": movie_future
-                })
-                
-        elif init_saved or end_saved:
-            response_data["status"] = "partial_success"
-        else:
-            response_data["status"] = "error"
-            response_data["error"] = "Failed to generate both states"
-        
-        comic.append(response_data)
-    
-    # Wait for all movie generation tasks to complete
-    print(f"\nWaiting for {len(movie_tasks)} movie generation tasks to complete...")
-    
-    for task in movie_tasks:
-        try:
-            # Get result with timeout
-            movie_result = task["future"].result(timeout=300)  # 5 minute timeout per movie
+                movie_futures.append((panel_num, movie_future))
             
-            # Add movie result to corresponding panel in comic
-            panel_idx = task["panel_number"] - 1
-            if panel_idx < len(comic):
-                comic[panel_idx]["movie"] = movie_result
-                
-            if movie_result["status"] == "success":
-                print(f"  ✓ Panel {task['panel_number']} movie completed: {movie_result['movie_path']}")
-            else:
-                print(f"  ✗ Panel {task['panel_number']} movie failed: {movie_result.get('error', 'Unknown error')}")
-                
-        except Exception as e:
-            print(f"  ✗ Panel {task['panel_number']} movie generation error: {str(e)}")
-            panel_idx = task["panel_number"] - 1
-            if panel_idx < len(comic):
-                comic[panel_idx]["movie"] = {
-                    "status": "error",
-                    "error": str(e)
-                }
+            comic.append(result)
+            print(f"  Panel {panel_num} complete: {result['status']}")
+        
+        # Wait for all movies to complete in parallel
+        if movie_futures:
+            print(f"\nWaiting for {len(movie_futures)} movie generations (running in parallel)...")
+            movies_done = 0
+            
+            # Process movies as they complete (not in order)
+            for panel_num, future in movie_futures:
+                try:
+                    movie_result = future.result(timeout=300)
+                    panel_idx = panel_num - 1
+                    
+                    if panel_idx < len(comic):
+                        comic[panel_idx]["movie"] = movie_result
+                    
+                    movies_done += 1
+                    status_icon = "✓" if movie_result.get("status") == "success" else "✗"
+                    print(f"{status_icon} Movie {panel_num} completed ({movies_done}/{len(movie_futures)})")
+                    
+                except Exception as e:
+                    print(f"✗ Movie {panel_num} error: {str(e)}")
+                    panel_idx = panel_num - 1
+                    if panel_idx < len(comic):
+                        comic[panel_idx]["movie"] = {"status": "error", "error": str(e)}
+                    movies_done += 1
     
-    # Shutdown executor
-    executor.shutdown(wait=False)
+    # Verify completion
+    total_time = time.time() - start_time
+    successful_panels = sum(1 for p in comic if p.get("status") == "success")
+    successful_movies = sum(1 for p in comic if p.get("movie", {}).get("status") == "success")
     
-    print(f"\nComic generation complete. Output directory: {output_dir}")
+    print(f"\n" + "="*50)
+    print(f"Comic generation complete in {total_time:.1f} seconds")
+    print(f"Panels: {successful_panels}/{len(panel_instructions)} successful")
+    print(f"Movies: {successful_movies}/{len(movie_futures)} successful")  
+    print(f"Output: {output_dir}")
+    print("="*50)
+    
     return comic
-
 def generate_panel_instructions(script: str, style: str) -> list[PanelInstruction]:
     client = genai.Client(
         api_key=os.environ.get("GEMINI_API_KEY"),
@@ -261,6 +247,14 @@ Each panel must have:
   * Lighting remains mostly the SAME
   * This is a STATIC image showing a TINY progression from init_state
   
+- narrative: SHORT and CRISP text describing action or dialogue for this panel:
+  * Character dialogue (e.g., "I'll never give up!")
+  * Action descriptions (e.g., "He leaps through the window")
+  * Sound effects (e.g., "CRASH!" or "swoosh")
+  * Brief narration when needed (e.g., "Meanwhile, across town...")
+  * Keep it concise - like comic book text
+  * Can combine multiple elements (e.g., "Watch out!" she yelled as the door exploded.)
+  
 - style: the visual style for this panel (based on provided style)
 
 CRITICAL RULES:
@@ -276,6 +270,7 @@ CRITICAL RULES:
    - Object falls or moves slightly
 5. Both states are STATIC images - no motion blur or speed lines
 6. The two states should be so similar that if overlapped, 90% would match exactly
+7. Narrative must be SHORT - include dialogue, actions, or sounds as needed
 
 Be extremely specific - these instructions will be used to generate images directly.
 
@@ -305,12 +300,16 @@ Style: {style}"""
                     "type": "string",
                     "description": "Detailed visual description of the panel's ending state after motion completes"
                 },
+                "narrative": {
+                    "type": "string",
+                    "description": "Short text describing action, dialogue, or sound effects for this panel (1-2 sentences max)"
+                },
                 "style": {
                     "type": "string", 
                     "description": "Visual style for this panel"
                 }
             },
-            "required": ["instructions", "init_state_instructions", "style"]
+            "required": ["instructions", "init_state_instructions", "narrative", "style"]
         }
     }
     
@@ -349,6 +348,7 @@ Style: {style}"""
             prev_image=None,  # Will be filled during sequential generation
             instructions=panel_data["instructions"],  # End state
             init_state_instructions=panel_data.get("init_state_instructions", panel_data["instructions"]),
+            narrative=panel_data.get("narrative", ""),
             style=panel_data["style"]
         )
         panels.append(panel)

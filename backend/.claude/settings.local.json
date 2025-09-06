@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//mnt/c/**)",
+      "Bash(sed:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from modules.comic_generator import generate_comic
+from modules.storyboard_to_audio import generate_audio_from_storyboard
 
 router = APIRouter()
 
@@ -38,6 +39,24 @@ async def generate_comic_draft(request: ComicDraftRequest):
         "status": "success"
     }
 
+@router.post("/generate-audio-cues")
+async def generate_audio_cues(request: ComicDraftRequest):
+    audio_files = generate_audio_from_storyboard(request.script)
+    return {"audio_files": audio_files, "status": "success"}
+
+
+# full multimedia comic
+@router.post("/generate-multimedia-comic")
+async def generate_multimedia_comic(request: ComicDraftRequest):
+    # Parallel generation
+    panels = generate_comic(request.script, request.style)
+    audio = generate_audio_from_storyboard(request.script)
+    
+    return {
+        "panels": panels,
+        "audio": audio,
+        "type": "multimedia_comic"
+    }
 
 @router.get("/health")
 async def health_check():

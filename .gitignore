@@ -25,6 +25,7 @@ MANIFEST
 venv/
 env/
 ENV/
+*.pyc
 
 # Environment variables
 .env

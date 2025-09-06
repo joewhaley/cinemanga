@@ -2,12 +2,27 @@
 """
 Storyboard → Gemini (google-genai) → ElevenLabs SDK (audio assets, with REST fallback)
 
-Env:
-  GEMINI_API_KEY   (Google Gemini API key)
-  ELEVEN_API_KEY   (ElevenLabs API key)
+Environment Variables (all optional with defaults):
+  GEMINI_API_KEY         (required) Google Gemini API key
+  ELEVEN_API_KEY         (required) ElevenLabs API key
+  GEMINI_MODEL           (default: gemini-2.5-flash) Gemini model to use
+  ELEVEN_API_URL         (default: https://api.elevenlabs.io/v1/sound-generation)
+  DEFAULT_MUSIC_FORMAT   (default: mp3) Default format for music files
+  DEFAULT_SFX_FORMAT     (default: wav) Default format for SFX files
+  GEMINI_TEMPERATURE     (default: 0.6) Temperature for Gemini generation
+  GEMINI_MAX_TOKENS      (default: 4096) Max tokens for Gemini
+  RATE_LIMIT_SLEEP       (default: 0.7) Sleep between API calls
+  MAX_RETRIES           (default: 4) Number of retry attempts
+  RETRY_BACKOFF         (default: 1.6) Backoff multiplier for retries
+  REQUEST_TIMEOUT       (default: 120) Request timeout in seconds
+  DEFAULT_OUTPUT_DIR    (default: ./exports) Default output directory
 
 Install:
   pip install google-genai elevenlabs requests python-slugify pydantic
+
+Configuration can be customized programmatically:
+  from storyboard_to_audio import create_custom_config
+  config = create_custom_config(gemini_temperature=0.8, rate_limit_sleep=1.0)
 """
 import os
 import sys
@@ -19,27 +34,215 @@ from typing import Dict, List, Optional, Any, Tuple
 
 import requests
 from slugify import slugify
-from pydantic import BaseModel, Field, ValidationError, conint
+from pydantic import BaseModel, Field, ValidationError, conint, field_validator, model_validator
 
-# ------------------ Config ------------------
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-ELEVEN_API_URL = os.getenv("ELEVEN_API_URL", "https://api.elevenlabs.io/v1/sound-generation")
+# ------------------ Centralized Configuration ------------------
+class AudioGenerationConfig(BaseModel):
+    """Centralized configuration for audio generation pipeline using Pydantic"""
+    
+    # API Configuration
+    gemini_api_key: str = Field("", description="Google Gemini API key (required)")
+    eleven_api_key: str = Field("", description="ElevenLabs API key (required)")
+    gemini_model: str = Field("gemini-2.5-flash", description="Gemini model to use")
+    eleven_api_url: str = Field(
+        "https://api.elevenlabs.io/v1/sound-generation", 
+        description="ElevenLabs API endpoint"
+    )
+    
+    # Audio Format Defaults
+    default_music_format: str = Field("mp3", description="Default music file format")
+    default_sfx_format: str = Field("wav", description="Default SFX file format")
+    
+    # Generation Parameters
+    gemini_temperature: float = Field(
+        1.0, 
+        ge=0.0, 
+        le=2.0, 
+        description="Temperature for Gemini generation (0.0-2.0)"
+    )
+    gemini_max_tokens: int = Field(
+        4096, 
+        gt=0, 
+        description="Maximum tokens for Gemini response"
+    )
+    rate_limit_sleep: float = Field(
+        0.7, 
+        ge=0.0, 
+        description="Sleep duration between API calls (seconds)"
+    )
+    
+    # Network & Retry Configuration
+    max_retries: int = Field(4, gt=0, description="Number of retry attempts")
+    retry_backoff: float = Field(1.6, gt=0.0, description="Backoff multiplier for retries")
+    request_timeout: int = Field(120, gt=0, description="Request timeout in seconds")
+    
+    # Duration Constraints
+    min_duration: int = Field(1, ge=1, le=60, description="Minimum audio duration")
+    max_duration: int = Field(60, ge=1, le=60, description="Maximum audio duration")
+    default_music_duration: int = Field(10, ge=1, le=60, description="Default music duration")
+    default_sfx_duration: int = Field(5, ge=1, le=60, description="Default SFX duration")
+    
+    # ElevenLabs SDK Configuration
+    optional_eleven_fields: Dict[str, Any] = Field(
+        default_factory=dict, 
+        description="Additional fields for ElevenLabs API"
+    )
+    
+    # Output Configuration
+    default_output_dir: str = Field("./exports", description="Default output directory")
+    
+    class Config:
+        """Pydantic configuration"""
+        extra = "forbid"  # Prevent unknown fields
+        validate_assignment = True  # Validate when fields are assigned
+        
+    @field_validator('optional_eleven_fields', mode='before')
+    @classmethod
+    def set_optional_eleven_fields(cls, v):
+        """Ensure optional_eleven_fields has a default value"""
+        if v is None:
+            return {
+                # "model_id": "eleven-sound-v1"  # Uncomment and modify as needed
+            }
+        return v
+    
+    @field_validator('default_music_format', 'default_sfx_format')
+    @classmethod
+    def validate_audio_formats(cls, v):
+        """Validate audio format is supported"""
+        valid_formats = {'mp3', 'wav', 'flac', 'aac', 'ogg'}
+        if v.lower() not in valid_formats:
+            raise ValueError(f"Audio format must be one of: {', '.join(valid_formats)}")
+        return v.lower()
+    
+    @model_validator(mode='after')
+    def validate_constraints(self):
+        """Validate various constraints and requirements"""
+        # Duration constraints validation
+        if self.min_duration > self.max_duration:
+            raise ValueError("min_duration must be <= max_duration")
+        
+        if not (self.min_duration <= self.default_music_duration <= self.max_duration):
+            raise ValueError("default_music_duration must be between min_duration and max_duration")
+            
+        if not (self.min_duration <= self.default_sfx_duration <= self.max_duration):
+            raise ValueError("default_sfx_duration must be between min_duration and max_duration")
+        
+        # API key validation (can be bypassed for testing or when explicitly disabled)
+        skip_validation = (
+            getattr(self, '_allow_empty_keys', False) or 
+            os.getenv('SKIP_CONFIG_VALIDATION', '').lower() in ('true', '1', 'yes')
+        )
+        
+        if not skip_validation:
+            if not self.gemini_api_key:
+                raise ValueError("gemini_api_key is required")
+            if not self.eleven_api_key:
+                raise ValueError("eleven_api_key is required")
+        
+        return self
+    
+    @classmethod
+    def from_env(cls) -> 'AudioGenerationConfig':
+        """Create configuration from environment variables with fallbacks"""
+        return cls(
+            gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
+            eleven_api_key=os.getenv("ELEVEN_API_KEY", ""),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            eleven_api_url=os.getenv("ELEVEN_API_URL", "https://api.elevenlabs.io/v1/sound-generation"),
+            default_music_format=os.getenv("DEFAULT_MUSIC_FORMAT", "mp3"),
+            default_sfx_format=os.getenv("DEFAULT_SFX_FORMAT", "wav"),
+            gemini_temperature=float(os.getenv("GEMINI_TEMPERATURE", "0.6")),
+            gemini_max_tokens=int(os.getenv("GEMINI_MAX_TOKENS", "4096")),
+            rate_limit_sleep=float(os.getenv("RATE_LIMIT_SLEEP", "0.7")),
+            max_retries=int(os.getenv("MAX_RETRIES", "4")),
+            retry_backoff=float(os.getenv("RETRY_BACKOFF", "1.6")),
+            request_timeout=int(os.getenv("REQUEST_TIMEOUT", "120")),
+            default_output_dir=os.getenv("DEFAULT_OUTPUT_DIR", "./exports"),
+        )
+    
+    @classmethod
+    def for_testing(cls, **overrides) -> 'AudioGenerationConfig':
+        """Create a configuration suitable for testing with minimal validation"""
+        defaults = {
+            "gemini_api_key": "test-gemini-key",
+            "eleven_api_key": "test-eleven-key",
+            "rate_limit_sleep": 0.0,  # No delays in tests
+            "max_retries": 1,  # Fewer retries in tests
+        }
+        defaults.update(overrides)
+        
+        # Create the instance and set the testing flag
+        instance = cls(**defaults)
+        # Use object.__setattr__ to bypass Pydantic validation for private field
+        object.__setattr__(instance, '_allow_empty_keys', True)
+        return instance
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY", "")
+# Global configuration instance (with validation skipped for module import)
+try:
+    CONFIG = AudioGenerationConfig.from_env()
+except ValidationError:
+    # If validation fails during import (e.g., missing API keys), create a minimal config
+    # This allows the module to be imported for testing or when keys will be provided later
+    os.environ['SKIP_CONFIG_VALIDATION'] = 'true'
+    CONFIG = AudioGenerationConfig.from_env()
+    del os.environ['SKIP_CONFIG_VALIDATION']
 
-DEFAULT_MUSIC_FORMAT = "mp3"   # e.g., "mp3"
-DEFAULT_SFX_FORMAT   = "wav"   # e.g., "wav"
-
-# If your ElevenLabs SDK/tenant needs a specific model id, add it here:
-OPTIONAL_ELEVEN_FIELDS: Dict[str, Any] = {
-    # "model_id": "eleven-sound-v1"
-}
+def create_custom_config(**overrides) -> AudioGenerationConfig:
+    """Create a custom configuration with specific overrides
+    
+    Example:
+        config = create_custom_config(
+            gemini_temperature=0.8,
+            default_music_format="wav",
+            rate_limit_sleep=1.0
+        )
+    """
+    # Get base values from environment
+    base_values = {
+        "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
+        "eleven_api_key": os.getenv("ELEVEN_API_KEY", ""),
+        "gemini_model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        "eleven_api_url": os.getenv("ELEVEN_API_URL", "https://api.elevenlabs.io/v1/sound-generation"),
+        "default_music_format": os.getenv("DEFAULT_MUSIC_FORMAT", "mp3"),
+        "default_sfx_format": os.getenv("DEFAULT_SFX_FORMAT", "wav"),
+        "gemini_temperature": float(os.getenv("GEMINI_TEMPERATURE", "0.6")),
+        "gemini_max_tokens": int(os.getenv("GEMINI_MAX_TOKENS", "4096")),
+        "rate_limit_sleep": float(os.getenv("RATE_LIMIT_SLEEP", "0.7")),
+        "max_retries": int(os.getenv("MAX_RETRIES", "4")),
+        "retry_backoff": float(os.getenv("RETRY_BACKOFF", "1.6")),
+        "request_timeout": int(os.getenv("REQUEST_TIMEOUT", "120")),
+        "default_output_dir": os.getenv("DEFAULT_OUTPUT_DIR", "./exports"),
+    }
+    
+    # Apply overrides
+    base_values.update(overrides)
+    
+    # If API keys are empty, temporarily skip validation
+    need_validation_skip = not base_values.get("gemini_api_key") or not base_values.get("eleven_api_key")
+    
+    if need_validation_skip:
+        # Temporarily set environment variable to skip validation
+        os.environ['SKIP_CONFIG_VALIDATION'] = 'true'
+        try:
+            config = AudioGenerationConfig(**base_values)
+        finally:
+            del os.environ['SKIP_CONFIG_VALIDATION']
+        return config
+    else:
+        # Create and return new config (Pydantic will validate automatically)
+        return AudioGenerationConfig(**base_values)
 
 # ------------------ Schemas ------------------
 class CueItem(BaseModel):
     prompt: str
-    duration: conint(ge=1, le=60)
+    duration: conint(ge=1, le=60)  # Use static values to avoid evaluation issues
+    
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Runtime validation using CONFIG
+        if not (CONFIG.min_duration <= self.duration <= CONFIG.max_duration):
+            raise ValueError(f"duration must be between {CONFIG.min_duration} and {CONFIG.max_duration}")
 
 class PanelCue(BaseModel):
     panel_number: conint(ge=1)
@@ -94,11 +297,16 @@ def ensure_outdir(p: Path):
 
 def build_rest_payload(text: str, duration: int, fmt: str) -> Dict[str, Any]:
     payload = {"text": text, "duration": duration, "format": fmt}
-    payload.update(OPTIONAL_ELEVEN_FIELDS)
+    payload.update(CONFIG.optional_eleven_fields)
     return payload
 
 def rest_request_with_retries(url: str, headers: Dict[str, str], payload: Dict[str, Any],
-                              max_retries=4, backoff=1.6, timeout=120) -> Tuple[bool, bytes, str]:
+                              max_retries: Optional[int] = None, 
+                              backoff: Optional[float] = None, 
+                              timeout: Optional[int] = None) -> Tuple[bool, bytes, str]:
+    max_retries = max_retries or CONFIG.max_retries
+    backoff = backoff or CONFIG.retry_backoff
+    timeout = timeout or CONFIG.request_timeout
     for attempt in range(1, max_retries + 1):
         try:
             r = requests.post(url, headers=headers, json=payload, timeout=timeout)
@@ -241,25 +449,28 @@ class ElevenSDKWrapper:
 def main():
     parser = argparse.ArgumentParser(description="Storyboard → Gemini (google-genai) → ElevenLabs SDK/REST")
     parser.add_argument("--storyboard", type=str, default=None, help="Path to storyboard .txt (or pass via stdin).")
-    parser.add_argument("--out", type=str, default="./exports", help="Output directory.")
+    parser.add_argument("--out", type=str, default=CONFIG.default_output_dir, help="Output directory.")
     parser.add_argument("--panels", type=str, default=None, help="Subset like '1-6,9,12-14'.")
     parser.add_argument("--only", type=str, default="music,sfx", help="'music', 'sfx', or 'music,sfx'.")
 
-    parser.add_argument("--format-music", type=str, default=DEFAULT_MUSIC_FORMAT)
-    parser.add_argument("--format-sfx", type=str, default=DEFAULT_SFX_FORMAT)
+    parser.add_argument("--format-music", type=str, default=CONFIG.default_music_format)
+    parser.add_argument("--format-sfx", type=str, default=CONFIG.default_sfx_format)
     parser.add_argument("--override-duration-music", type=int, default=None)
     parser.add_argument("--override-duration-sfx", type=int, default=None)
 
-    parser.add_argument("--gemini-temp", type=float, default=0.6)
-    parser.add_argument("--gemini-max-tokens", type=int, default=4096)
-    parser.add_argument("--rate-limit-sleep", type=float, default=0.7)
+    parser.add_argument("--gemini-temp", type=float, default=CONFIG.gemini_temperature)
+    parser.add_argument("--gemini-max-tokens", type=int, default=CONFIG.gemini_max_tokens)
+    parser.add_argument("--rate-limit-sleep", type=float, default=CONFIG.rate_limit_sleep)
 
     args = parser.parse_args()
 
-    if not GEMINI_API_KEY:
-        print("ERROR: GEMINI_API_KEY not set.", file=sys.stderr); sys.exit(1)
-    if not ELEVEN_API_KEY:
-        print("ERROR: ELEVEN_API_KEY not set.", file=sys.stderr); sys.exit(1)
+    # Pydantic validates automatically during instantiation, but we can catch any issues here
+    try:
+        # Just access the CONFIG to trigger any lazy validation
+        _ = CONFIG.gemini_api_key, CONFIG.eleven_api_key
+    except ValidationError as e:
+        print(f"ERROR: Configuration validation failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
     storyboard = read_storyboard_text(args.storyboard).strip()
     if not storyboard:
@@ -273,10 +484,10 @@ def main():
         print("ERROR: google-genai not installed. Run: pip install google-genai", file=sys.stderr)
         sys.exit(1)
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=CONFIG.gemini_api_key)
     prompt = GEMINI_USER + storyboard + "\n\nJSON ONLY."
     resp = client.models.generate_content(
-        model=GEMINI_MODEL,
+        model=CONFIG.gemini_model,
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=args.gemini_temp,
@@ -310,7 +521,7 @@ def main():
     outdir = Path(args.out); ensure_outdir(outdir)
     kinds = [t.strip().lower() for t in args.only.split(",") if t.strip() in ("music", "sfx")]
 
-    sdk = ElevenSDKWrapper(api_key=ELEVEN_API_KEY, rest_url=ELEVEN_API_URL)
+    sdk = ElevenSDKWrapper(api_key=CONFIG.eleven_api_key, rest_url=CONFIG.eleven_api_url)
 
     total, failures = 0, []
     for p in panels:

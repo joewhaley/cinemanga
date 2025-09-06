@@ -6,6 +6,7 @@ services:
     container_name: cinemanga-backend
     ports:
       - "${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
+      - "${DEBUG_PORT:-5678}:5678"
     volumes:
       - ./backend:/app
       - /app/__pycache__
@@ -13,6 +14,8 @@ services:
     environment:
       - PORT=${BACKEND_PORT:-8000}
       - DEBUG=${DEBUG:-true}
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
     env_file:
       - .env
-    command: python -m uvicorn main:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload
+    command: python -m debugpy --listen 0.0.0.0:5678  -m uvicorn main:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload

@@ -1,24 +1,42 @@
 #!/usr/bin/env python3
 """
-Storyboard → Gemini (google-genai) → ElevenLabs SDK (audio assets, with REST fallback)
+Panel Instructions → Gemini (music/SFX cues) → ElevenLabs SDK (audio assets + TTS)
+
+This module generates audio from panel instructions with narrative text:
+1. Takes panel instructions with narrative field
+2. Uses Gemini to generate music/SFX audio cues
+3. Uses ElevenLabs TTS for narrative audio with voice selection
+4. Supports sound generation (music/SFX) and text-to-speech (narrative)
 
 Environment Variables (all optional with defaults):
-  GEMINI_API_KEY         (required) Google Gemini API key
-  ELEVEN_API_KEY         (required) ElevenLabs API key
-  GEMINI_MODEL           (default: gemini-2.5-flash) Gemini model to use
-  ELEVEN_API_URL         (default: https://api.elevenlabs.io/v1/sound-generation)
-  DEFAULT_MUSIC_FORMAT   (default: mp3) Default format for music files
-  DEFAULT_SFX_FORMAT     (default: wav) Default format for SFX files
-  GEMINI_TEMPERATURE     (default: 0.6) Temperature for Gemini generation
-  GEMINI_MAX_TOKENS      (default: 4096) Max tokens for Gemini
-  RATE_LIMIT_SLEEP       (default: 0.7) Sleep between API calls
-  MAX_RETRIES           (default: 4) Number of retry attempts
-  RETRY_BACKOFF         (default: 1.6) Backoff multiplier for retries
-  REQUEST_TIMEOUT       (default: 120) Request timeout in seconds
-  DEFAULT_OUTPUT_DIR    (default: ./exports) Default output directory
+  GEMINI_API_KEY           (required) Google Gemini API key
+  ELEVEN_API_KEY           (required) ElevenLabs API key
+  GEMINI_MODEL             (default: gemini-2.5-flash) Gemini model to use
+  ELEVEN_API_URL           (default: https://api.elevenlabs.io/v1/sound-generation)
+  ELEVEN_TTS_URL           (default: https://api.elevenlabs.io/v1/text-to-speech)
+  DEFAULT_MUSIC_FORMAT     (default: mp3) Default format for music files
+  DEFAULT_SFX_FORMAT       (default: wav) Default format for SFX files
+  DEFAULT_NARRATIVE_FORMAT (default: mp3) Default format for narrative audio
+  DEFAULT_NARRATOR_VOICE   (default: pNInz6obpgDQGcFmaJgB) Default narrator voice ID
+  DEFAULT_MALE_VOICE       (default: TxGEqnHWrfWFTfGW9XjX) Default male voice ID
+  DEFAULT_FEMALE_VOICE     (default: 21m00Tcm4TlvDq8ikWAM) Default female voice ID
+  DEFAULT_ELDERLY_VOICE    (default: VR6AewLTigWG4xSOukaG) Default elderly voice ID
+  VOICE_STABILITY          (default: 0.5) Voice stability for TTS (0.0-1.0)
+  VOICE_SIMILARITY_BOOST   (default: 0.5) Voice similarity boost for TTS (0.0-1.0)
+  GEMINI_TEMPERATURE       (default: 0.6) Temperature for Gemini generation
+  GEMINI_MAX_TOKENS        (default: 4096) Max tokens for Gemini
+  RATE_LIMIT_SLEEP         (default: 0.7) Sleep between API calls
+  MAX_RETRIES             (default: 4) Number of retry attempts
+  RETRY_BACKOFF           (default: 1.6) Backoff multiplier for retries
+  REQUEST_TIMEOUT         (default: 120) Request timeout in seconds
+  DEFAULT_OUTPUT_DIR      (default: ./exports) Default output directory
 
 Install:
   pip install google-genai elevenlabs requests python-slugify pydantic
+
+Main Functions:
+  generate_audio_from_panel_instructions() - Generate audio from panel instructions
+  generate_audio_from_script() - Legacy: Generate audio from script text
 
 Configuration can be customized programmatically:
   from storyboard_to_audio import create_custom_config
@@ -29,6 +47,7 @@ import sys
 import json
 import time
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -48,10 +67,15 @@ class AudioGenerationConfig(BaseModel):
         "https://api.elevenlabs.io/v1/sound-generation", 
         description="ElevenLabs API endpoint"
     )
+    eleven_tts_url: str = Field(
+        "https://api.elevenlabs.io/v1/text-to-speech", 
+        description="ElevenLabs Text-to-Speech API endpoint"
+    )
     
     # Audio Format Defaults
     default_music_format: str = Field("mp3", description="Default music file format")
     default_sfx_format: str = Field("wav", description="Default SFX file format")
+    default_narrative_format: str = Field("mp3", description="Default narrative audio file format")
     
     # Generation Parameters
     gemini_temperature: float = Field(
@@ -88,6 +112,36 @@ class AudioGenerationConfig(BaseModel):
         description="Additional fields for ElevenLabs API"
     )
     
+    # TTS Voice Configuration
+    default_narrator_voice: str = Field(
+        "pNInz6obpgDQGcFmaJgB", 
+        description="Default narrator voice ID (Adam)"
+    )
+    default_male_voice: str = Field(
+        "TxGEqnHWrfWFTfGW9XjX", 
+        description="Default male character voice ID (Josh)"
+    )
+    default_female_voice: str = Field(
+        "21m00Tcm4TlvDq8ikWAM", 
+        description="Default female character voice ID (Rachel)"
+    )
+    default_elderly_voice: str = Field(
+        "VR6AewLTigWG4xSOukaG", 
+        description="Default elderly character voice ID (Arnold)"
+    )
+    voice_stability: float = Field(
+        0.5, 
+        ge=0.0, 
+        le=1.0, 
+        description="Voice stability for TTS (0.0-1.0)"
+    )
+    voice_similarity_boost: float = Field(
+        0.5, 
+        ge=0.0, 
+        le=1.0, 
+        description="Voice similarity boost for TTS (0.0-1.0)"
+    )
+    
     # Output Configuration
     default_output_dir: str = Field("./exports", description="Default output directory")
     
@@ -106,7 +160,7 @@ class AudioGenerationConfig(BaseModel):
             }
         return v
     
-    @field_validator('default_music_format', 'default_sfx_format')
+    @field_validator('default_music_format', 'default_sfx_format', 'default_narrative_format')
     @classmethod
     def validate_audio_formats(cls, v):
         """Validate audio format is supported"""
@@ -150,8 +204,16 @@ class AudioGenerationConfig(BaseModel):
             eleven_api_key=os.getenv("ELEVEN_API_KEY", ""),
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
             eleven_api_url=os.getenv("ELEVEN_API_URL", "https://api.elevenlabs.io/v1/sound-generation"),
+            eleven_tts_url=os.getenv("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech"),
             default_music_format=os.getenv("DEFAULT_MUSIC_FORMAT", "mp3"),
             default_sfx_format=os.getenv("DEFAULT_SFX_FORMAT", "wav"),
+            default_narrative_format=os.getenv("DEFAULT_NARRATIVE_FORMAT", "mp3"),
+            default_narrator_voice=os.getenv("DEFAULT_NARRATOR_VOICE", "pNInz6obpgDQGcFmaJgB"),
+            default_male_voice=os.getenv("DEFAULT_MALE_VOICE", "TxGEqnHWrfWFTfGW9XjX"),
+            default_female_voice=os.getenv("DEFAULT_FEMALE_VOICE", "21m00Tcm4TlvDq8ikWAM"),
+            default_elderly_voice=os.getenv("DEFAULT_ELDERLY_VOICE", "VR6AewLTigWG4xSOukaG"),
+            voice_stability=float(os.getenv("VOICE_STABILITY", "0.5")),
+            voice_similarity_boost=float(os.getenv("VOICE_SIMILARITY_BOOST", "0.5")),
             gemini_temperature=float(os.getenv("GEMINI_TEMPERATURE", "0.6")),
             gemini_max_tokens=int(os.getenv("GEMINI_MAX_TOKENS", "4096")),
             rate_limit_sleep=float(os.getenv("RATE_LIMIT_SLEEP", "0.7")),
@@ -204,8 +266,16 @@ def create_custom_config(**overrides) -> AudioGenerationConfig:
         "eleven_api_key": os.getenv("ELEVEN_API_KEY", ""),
         "gemini_model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         "eleven_api_url": os.getenv("ELEVEN_API_URL", "https://api.elevenlabs.io/v1/sound-generation"),
+        "eleven_tts_url": os.getenv("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech"),
         "default_music_format": os.getenv("DEFAULT_MUSIC_FORMAT", "mp3"),
         "default_sfx_format": os.getenv("DEFAULT_SFX_FORMAT", "wav"),
+        "default_narrative_format": os.getenv("DEFAULT_NARRATIVE_FORMAT", "mp3"),
+        "default_narrator_voice": os.getenv("DEFAULT_NARRATOR_VOICE", "pNInz6obpgDQGcFmaJgB"),
+        "default_male_voice": os.getenv("DEFAULT_MALE_VOICE", "TxGEqnHWrfWFTfGW9XjX"),
+        "default_female_voice": os.getenv("DEFAULT_FEMALE_VOICE", "21m00Tcm4TlvDq8ikWAM"),
+        "default_elderly_voice": os.getenv("DEFAULT_ELDERLY_VOICE", "VR6AewLTigWG4xSOukaG"),
+        "voice_stability": float(os.getenv("VOICE_STABILITY", "0.5")),
+        "voice_similarity_boost": float(os.getenv("VOICE_SIMILARITY_BOOST", "0.5")),
         "gemini_temperature": float(os.getenv("GEMINI_TEMPERATURE", "0.6")),
         "gemini_max_tokens": int(os.getenv("GEMINI_MAX_TOKENS", "4096")),
         "rate_limit_sleep": float(os.getenv("RATE_LIMIT_SLEEP", "0.7")),
@@ -295,6 +365,11 @@ def extract_json_block(s: str) -> str:
 def ensure_outdir(p: Path):
     p.mkdir(parents=True, exist_ok=True)
 
+def create_timestamped_audio_dir(base_name: str = "audio-assets") -> str:
+    """Create a timestamped audio directory name"""
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return f"{base_name}-{timestamp}"
+
 def build_rest_payload(text: str, duration: int, fmt: str) -> Dict[str, Any]:
     payload = {"text": text, "duration": duration, "format": fmt}
     payload.update(CONFIG.optional_eleven_fields)
@@ -335,6 +410,47 @@ def clip_filename(panel_num: int, kind: str, fmt: str, title: Optional[str]) -> 
         base += f"_{slugify(title)[:30]}"
     return f"{base}.{fmt}"
 
+def select_voice_for_narrative(narrative: str, config: AudioGenerationConfig) -> str:
+    """Select appropriate voice based on narrative content"""
+    narrative_lower = narrative.lower()
+    
+    # Check for specific character indicators
+    if any(indicator in narrative_lower for indicator in ['elderly', 'old man', 'old woman', 'aged']):
+        return config.default_elderly_voice
+    elif any(indicator in narrative_lower for indicator in ['woman', 'girl', 'female', 'she', 'her']):
+        return config.default_female_voice
+    elif any(indicator in narrative_lower for indicator in ['man', 'boy', 'male', 'he', 'him']):
+        return config.default_male_voice
+    elif narrative_lower.startswith('sfx:') or 'sound effect' in narrative_lower:
+        # For SFX descriptions, use narrator voice
+        return config.default_narrator_voice
+    else:
+        # Default to narrator for general descriptions
+        return config.default_narrator_voice
+
+def clean_narrative_text(narrative: str) -> str:
+    """Clean narrative text for TTS by removing formatting and irrelevant parts"""
+    if not narrative or narrative.strip() == "(Silent panel)":
+        return ""
+    
+    # Remove SFX: prefix for cleaner speech
+    if narrative.startswith("SFX:"):
+        narrative = narrative[4:].strip()
+    
+    # Remove character name prefixes like "ELDERLY JAPANESE MAN (in Japanese):"
+    import re
+    narrative = re.sub(r'^[A-Z\s]+\([^)]+\):\s*', '', narrative)
+    narrative = re.sub(r'^[A-Z\s]+:\s*', '', narrative)
+    
+    # Remove quotes for more natural speech
+    narrative = narrative.strip('"')
+    
+    # Handle special cases
+    if not narrative or len(narrative.strip()) < 3:
+        return ""
+        
+    return narrative.strip()
+
 def parse_panel_range(spec: str) -> List[int]:
     out = set()
     if not spec:
@@ -357,10 +473,12 @@ class ElevenSDKWrapper:
     """
     Uses ElevenLabs Python SDK when available; otherwise falls back to REST.
     Tries multiple method names to be compatible across SDK versions.
+    Supports both sound generation and text-to-speech.
     """
-    def __init__(self, api_key: str, rest_url: str):
+    def __init__(self, api_key: str, rest_url: str, tts_url: str = None):
         self.api_key = api_key
         self.rest_url = rest_url
+        self.tts_url = tts_url or "https://api.elevenlabs.io/v1/text-to-speech"
         self.client = None
         self.sdk_error_cls = Exception
 
@@ -444,10 +562,62 @@ class ElevenSDKWrapper:
         payload = build_rest_payload(prompt, duration, fmt)
         ok, content, err = rest_request_with_retries(self.rest_url, headers, payload)
         return ok, content, err
+    
+    def generate_speech_bytes(self, text: str, voice_id: str, fmt: str = "mp3", 
+                             stability: float = 0.5, similarity_boost: float = 0.5) -> Tuple[bool, bytes, str]:
+        """Generate speech from text using ElevenLabs TTS"""
+        # 1) Try SDK paths if client present
+        if self.client is not None:
+            try:
+                # Try text_to_speech SDK method
+                if hasattr(self.client, 'text_to_speech') and hasattr(self.client.text_to_speech, 'convert'):
+                    data = self.client.text_to_speech.convert(
+                        voice_id=voice_id,
+                        text=text,
+                        model_id="eleven_multilingual_v2",
+                        voice_settings={
+                            "stability": stability,
+                            "similarity_boost": similarity_boost
+                        }
+                    )
+                    # Handle different return types
+                    if isinstance(data, (bytes, bytearray)):
+                        return True, bytes(data), ""
+                    elif hasattr(data, '__iter__') and not isinstance(data, (str, dict)):
+                        # Handle streaming response
+                        chunks = []
+                        for chunk in data:
+                            if isinstance(chunk, (bytes, bytearray)):
+                                chunks.append(bytes(chunk))
+                        if chunks:
+                            return True, b"".join(chunks), ""
+            except self.sdk_error_cls as e:
+                print(f"[warn] SDK TTS failed: {e}, falling back to REST")
+            except Exception as e:
+                print(f"[warn] SDK TTS error: {e}, falling back to REST")
+        
+        # 2) REST fallback for TTS
+        headers = {
+            "xi-api-key": self.api_key,
+            "Content-Type": "application/json"
+        }
+        
+        tts_payload = {
+            "text": text,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability": stability,
+                "similarity_boost": similarity_boost
+            }
+        }
+        
+        tts_endpoint = f"{self.tts_url}/{voice_id}"
+        ok, content, err = rest_request_with_retries(tts_endpoint, headers, tts_payload)
+        return ok, content, err
 
 # ------------------ API Integration ------------------
 def generate_audio_from_script(script: str, 
-                              output_dir: str = "audio_assets",
+                              output_dir: Optional[str] = None,
                               panels_filter: Optional[str] = None,
                               audio_types: str = "music,sfx",
                               config: Optional[AudioGenerationConfig] = None) -> List[Dict[str, Any]]:
@@ -456,7 +626,7 @@ def generate_audio_from_script(script: str,
     
     Args:
         script: The storyboard script text
-        output_dir: Directory to save audio files (relative to backend/)
+        output_dir: Directory to save audio files (None for timestamped default)
         panels_filter: Optional panel range filter like "1-6,9,12-14"
         audio_types: Types to generate: "music", "sfx", or "music,sfx"
         config: Optional custom configuration
@@ -469,6 +639,10 @@ def generate_audio_from_script(script: str,
     
     # Use provided config or global CONFIG
     cfg = config or CONFIG
+    
+    # Create timestamped output directory if not specified
+    if output_dir is None:
+        output_dir = create_timestamped_audio_dir("audio-assets")
     
     # Ensure output directory exists
     output_path = Path(output_dir)
@@ -519,8 +693,8 @@ def generate_audio_from_script(script: str,
         panels.append(p)
 
     # ---- ElevenLabs generation ----
-    kinds = [t.strip().lower() for t in audio_types.split(",") if t.strip() in ("music", "sfx")]
-    sdk = ElevenSDKWrapper(api_key=cfg.eleven_api_key, rest_url=cfg.eleven_api_url)
+    kinds = [t.strip().lower() for t in audio_types.split(",") if t.strip() in ("music", "sfx", "narrative")]
+    sdk = ElevenSDKWrapper(api_key=cfg.eleven_api_key, rest_url=cfg.eleven_api_url, tts_url=cfg.eleven_tts_url)
 
     generated_files = []
     
@@ -578,17 +752,213 @@ def generate_audio_from_script(script: str,
                 print(f"[error] panel {p.panel_number:02d} sfx: {err}")
             
             time.sleep(cfg.rate_limit_sleep)
+
+        # NARRATIVE (TTS)
+        if "narrative" in kinds and p.title:  # Use title field for narrative or add narrative field
+            # For now, we'll add narrative support but need the actual narrative text
+            pass
         
         if panel_files["files"]:  # Only add if files were generated
             generated_files.append(panel_files)
 
     return generated_files
 
+def generate_audio_from_panel_instructions(panel_instructions: List[Dict[str, Any]], 
+                                          output_dir: Optional[str] = None,
+                                          panels_filter: Optional[str] = None,
+                                          audio_types: str = "music,sfx,narrative",
+                                          config: Optional[AudioGenerationConfig] = None) -> List[Dict[str, Any]]:
+    """
+    Generate audio files directly from panel instructions
+    
+    Args:
+        panel_instructions: List of panel instruction dictionaries with narrative field
+        output_dir: Directory to save audio files (None for timestamped default)
+        panels_filter: Optional panel range filter like "1-6,9,12-14"
+        audio_types: Types to generate: "music", "sfx", "narrative", or combinations
+        config: Optional custom configuration
+        
+    Returns:
+        List of generated audio file information
+    """
+    if not panel_instructions:
+        raise ValueError("Panel instructions cannot be empty")
+    
+    # Use provided config or global CONFIG
+    cfg = config or CONFIG
+    
+    # Create timestamped output directory if not specified
+    if output_dir is None:
+        output_dir = create_timestamped_audio_dir("audio-assets")
+    
+    # Ensure output directory exists
+    output_path = Path(output_dir)
+    ensure_outdir(output_path)
+    
+    # Convert panel instructions to a script for Gemini to generate music/SFX cues
+    script_for_gemini = ""
+    for i, panel in enumerate(panel_instructions, 1):
+        script_for_gemini += f"Panel {i}: {panel.get('narrative', '')}\n"
+        script_for_gemini += f"Visual: {panel.get('instructions', '')}\n\n"
+    
+    # ---- Gemini (google-genai) for music/SFX cues ----
+    music_sfx_cues = []
+    if any(audio_type in audio_types for audio_type in ["music", "sfx"]):
+        try:
+            from google import genai
+            from google.genai import types
+        except ImportError as e:
+            raise RuntimeError("google-genai not installed. Run: pip install google-genai") from e
+
+        # Create Gemini client
+        client = genai.Client(api_key=cfg.gemini_api_key)
+        prompt = GEMINI_USER + script_for_gemini.strip() + "\n\nJSON ONLY."
+        
+        # Generate cue sheet
+        resp = client.models.generate_content(
+            model=cfg.gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=cfg.gemini_temperature,
+                max_output_tokens=cfg.gemini_max_tokens,
+                system_instruction=GEMINI_SYSTEM,
+                response_mime_type="application/json"
+            ),
+        )
+        
+        raw_text = getattr(resp, "text", "") or ""
+        json_text = extract_json_block(raw_text)
+
+        try:
+            cue_data = json.loads(json_text)
+            cue_sheet = CueSheet(**cue_data)
+            music_sfx_cues = cue_sheet.panels
+        except (json.JSONDecodeError, ValidationError) as e:
+            print(f"[warn] Failed to parse Gemini JSON for music/SFX: {e}")
+            music_sfx_cues = []
+
+    # Filter panels if specified
+    wanted = parse_panel_range(panels_filter) if panels_filter else None
+    
+    # ---- ElevenLabs generation ----
+    kinds = [t.strip().lower() for t in audio_types.split(",") if t.strip() in ("music", "sfx", "narrative")]
+    sdk = ElevenSDKWrapper(api_key=cfg.eleven_api_key, rest_url=cfg.eleven_api_url, tts_url=cfg.eleven_tts_url)
+
+    generated_files = []
+    
+    for i, panel_instruction in enumerate(panel_instructions, 1):
+        if wanted and i not in wanted:
+            continue
+            
+        panel_files = {"panel_number": i, "title": panel_instruction.get("narrative", ""), "files": []}
+        
+        # Get corresponding music/SFX cue if available
+        cue = None
+        if music_sfx_cues:
+            # Find matching cue by panel number
+            for c in music_sfx_cues:
+                if c.panel_number == i:
+                    cue = c
+                    break
+        
+        # MUSIC
+        if "music" in kinds and cue and cue.music:
+            fname = clip_filename(i, "music", cfg.default_music_format, None)
+            fpath = output_path / fname
+            
+            ok, content, err = sdk.generate_bytes(
+                prompt=cue.music.prompt, 
+                duration=cue.music.duration, 
+                fmt=cfg.default_music_format
+            )
+            
+            if ok:
+                fpath.write_bytes(content)
+                panel_files["files"].append({
+                    "type": "music",
+                    "filename": fname,
+                    "path": str(fpath),
+                    "prompt": cue.music.prompt,
+                    "duration": cue.music.duration,
+                    "format": cfg.default_music_format
+                })
+            else:
+                print(f"[error] panel {i:02d} music: {err}")
+            
+            time.sleep(cfg.rate_limit_sleep)
+
+        # SFX
+        if "sfx" in kinds and cue and cue.sfx:
+            fname = clip_filename(i, "sfx", cfg.default_sfx_format, None)
+            fpath = output_path / fname
+            
+            ok, content, err = sdk.generate_bytes(
+                prompt=cue.sfx.prompt, 
+                duration=cue.sfx.duration, 
+                fmt=cfg.default_sfx_format
+            )
+            
+            if ok:
+                fpath.write_bytes(content)
+                panel_files["files"].append({
+                    "type": "sfx",
+                    "filename": fname,
+                    "path": str(fpath),
+                    "prompt": cue.sfx.prompt,
+                    "duration": cue.sfx.duration,
+                    "format": cfg.default_sfx_format
+                })
+            else:
+                print(f"[error] panel {i:02d} sfx: {err}")
+            
+            time.sleep(cfg.rate_limit_sleep)
+
+        # NARRATIVE (TTS)
+        if "narrative" in kinds:
+            narrative_text = clean_narrative_text(panel_instruction.get("narrative", ""))
+            
+            if narrative_text:  # Only generate if there's actual text
+                voice_id = select_voice_for_narrative(narrative_text, cfg)
+                fname = clip_filename(i, "narrative", cfg.default_narrative_format, None)
+                fpath = output_path / fname
+                
+                ok, content, err = sdk.generate_speech_bytes(
+                    text=narrative_text,
+                    voice_id=voice_id,
+                    fmt=cfg.default_narrative_format,
+                    stability=cfg.voice_stability,
+                    similarity_boost=cfg.voice_similarity_boost
+                )
+                
+                if ok:
+                    fpath.write_bytes(content)
+                    panel_files["files"].append({
+                        "type": "narrative",
+                        "filename": fname,
+                        "path": str(fpath),
+                        "text": narrative_text,
+                        "voice_id": voice_id,
+                        "format": cfg.default_narrative_format
+                    })
+                else:
+                    print(f"[error] panel {i:02d} narrative: {err}")
+                
+                time.sleep(cfg.rate_limit_sleep)
+        
+        if panel_files["files"]:  # Only add if files were generated
+            generated_files.append(panel_files)
+
+    return {
+        "files": generated_files,
+        "output_directory": str(output_path),
+        "total_panels": len(generated_files)
+    }
+
 # ------------------ Main CLI ------------------
 def generate_audio_from_storyboard():
     parser = argparse.ArgumentParser(description="Storyboard → Gemini (google-genai) → ElevenLabs SDK/REST")
     parser.add_argument("--storyboard", type=str, default=None, help="Path to storyboard .txt (or pass via stdin).")
-    parser.add_argument("--out", type=str, default=CONFIG.default_output_dir, help="Output directory.")
+    parser.add_argument("--out", type=str, default=None, help="Output directory (default: timestamped audio-assets folder).")
     parser.add_argument("--panels", type=str, default=None, help="Subset like '1-6,9,12-14'.")
     parser.add_argument("--only", type=str, default="music,sfx", help="'music', 'sfx', or 'music,sfx'.")
 
@@ -657,7 +1027,12 @@ def generate_audio_from_storyboard():
         panels.append(p)
 
     # ---- ElevenLabs generation (SDK w/ REST fallback) ----
-    outdir = Path(args.out); ensure_outdir(outdir)
+    # Create timestamped output directory if not specified
+    output_dir = args.out
+    if output_dir is None:
+        output_dir = create_timestamped_audio_dir("audio-assets")
+    
+    outdir = Path(output_dir); ensure_outdir(outdir)
     kinds = [t.strip().lower() for t in args.only.split(",") if t.strip() in ("music", "sfx")]
 
     sdk = ElevenSDKWrapper(api_key=CONFIG.eleven_api_key, rest_url=CONFIG.eleven_api_url)

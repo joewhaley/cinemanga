@@ -1,0 +1,31 @@
+   },
+   {
+      "prev_image":"None",
+      "instructions":"Same extreme close-up. The Elderly Man's fingers have gently closed around the cone, lifting it a millimeter off the table's surface. His hand is poised and still.",
+      "init_state_instructions":"Extreme close-up on the pewter cone and the handgun on the table. The gnarled, wrinkled hand of the Elderly Man enters the frame, his fingers hovering just above the small pewter cone.",
+      "narrative":"(Silent panel)",
+      "style":"manga style, black and white with dramatic shading"
+   },
+   {
+      "prev_image":"None",
+      "instructions":"Same profile shot. The Elderly Man's gaze has lifted from the cone and is now directed off-panel, presumably at the Attendant. His mouth is slightly open as he gives a command. He still holds the cone.",
+      "init_state_instructions":"Side-view profile shot of the Elderly Man. He holds the small pewter cone between his thumb and forefinger, examining it with a neutral, thoughtful expression. His gaze is directed down at the object.",
+      "narrative":"ELDERLY JAPANESE MAN (in Japanese): \"Bring him here. And some food.\"",
+      "style":"manga style, black and white with dramatic shading"
+   },
+   {
+      "prev_image":"None",
+      "instructions":"Same shot. The Bearded Man lifts his head just enough to bring a large portion of food to his mouth with his chopsticks. His eyes remain locked on the bowl, not acknowledging the other man.",
+      "init_state_instructions":"Shot from across the polished table. The Bearded Man, looking cleaner but still disheveled, is hunched over a bowl, head down, focused entirely on eating his food voraciously. Opposite him, the Elderly Man sits calmly, watching him with a neutral expression.",
+      "narrative":"SFX: clatter... slurp",
+      "style":"manga style, black and white with dramatic shading"
+   },
+   {
+      "prev_image":"None",
+      "instructions":"Same shot. The Elderly Man's hand has pushed the handgun, sending it sliding across the polished surface to a stop directly in front of the Bearded Man. The Bearded Man has frozen, chopsticks halfway to his mouth.",
+      "init_state_instructions":"Over-the-shoulder shot from behind the Elderly Man. His hand rests on the grip of the handgun, which sits on the table before him. Across the table, the Bearded Man continues to eat, head down.",
+      "narrative":"SFX: sssshhwwwwwwwk",
+      "style":"manga style, black and white with dramatic shading"
+   },
+   "..."
+]

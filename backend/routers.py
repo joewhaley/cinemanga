@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from modules.comic_generator import generate_comic, generate_panel_instructions
-from modules.storyboard_to_audio import generate_audio_from_storyboard
+from modules.storyboard_to_audio import generate_audio_from_panel_instructions
 
 router = APIRouter()
 
@@ -43,8 +43,13 @@ async def generate_comic_draft(request: ComicDraftRequest):
 async def generate_audio_cues(request: ComicDraftRequest):
     try:
         panel_instructions = generate_panel_instructions(request.script, request.style)
-        audio_files = generate_audio_from_storyboard(panel_instructions)
-        return {"audio_files": audio_files, "status": "success"}
+        audio_result = generate_audio_from_panel_instructions(panel_instructions)
+        return {
+            "audio_files": audio_result["files"], 
+            "output_directory": audio_result["output_directory"],
+            "total_panels": audio_result["total_panels"],
+            "status": "success"
+        }
     except Exception as e:
         return {"error": str(e), "status": "error"}
 
@@ -56,11 +61,14 @@ async def generate_multimedia_comic(request: ComicDraftRequest):
         # Parallel generation
         panel_instructions = generate_panel_instructions(request.script, request.style)
         panels = generate_comic(request.script, request.style)
-        audio = generate_audio_from_storyboard(panel_instructions)
+        audio_result = generate_audio_from_panel_instructions(panel_instructions)
         
         return {
             "panels": panels,
-            "audio": audio,
+            "audio": audio_result["files"],
+            "output_directory": audio_result["output_directory"],
+            "panel_count": len(panels) if panels else 0,
+            "audio_files_count": audio_result["total_panels"],
             "type": "multimedia_comic",
             "status": "success"
         }

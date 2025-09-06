@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from modules.comic_generator import generate_panels
+from modules import generate_comic, generate_movie
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ async def upload_comic():
 
 @router.post("/generate-comic-draft")
 async def generate_comic_draft(request: ComicDraftRequest):
-    panels = generate_panels(request.script, request.style)
+    panels = generate_comic(request.script, request.style)
     return {
         "panels": panels,
         "status": "success"

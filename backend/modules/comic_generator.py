@@ -9,6 +9,10 @@ from datetime import datetime
 from google import genai
 from google.genai import types
 import fal_client
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import threading
+from modules.movie_generator import generate_movie_from_panels
 
 class ImageData(TypedDict):
     data: bytes
@@ -40,6 +44,10 @@ def generate_comic(script: str, style: str) -> list[dict]:
     output_dir.mkdir(exist_ok=True)
     print(f"Saving panels to: {output_dir}")
     
+    # List to store movie generation tasks
+    movie_tasks = []
+    executor = ThreadPoolExecutor(max_workers=5)  # Allow up to 5 concurrent movie generations
+    
     for index, instruction in enumerate(panel_instructions):
         print(f"Generating panel {index + 1}/{len(panel_instructions)}...")
         
@@ -55,12 +63,15 @@ def generate_comic(script: str, style: str) -> list[dict]:
         print(f"  Generating init state for panel {index + 1}...")
         init_instruction = dict(instruction)
         init_instruction["instructions"] = instruction["init_state_instructions"]  # Use init state as main instruction
+        
+        # Use previous image (which could be previous panel's end state) as reference
         if prev_image:
             init_instruction["prev_image"] = prev_image
-            init_instruction["instructions"] = f"Continue from previous panel. {init_instruction['instructions']}"
+            init_instruction["instructions"] = f"Continue from previous image. {init_instruction['instructions']}"
         
         init_saved = False
-        max_generation_retries = 3
+        init_result = None
+        max_generation_retries = 5
         
         # Generate and save init state
         for attempt in range(1, max_generation_retries + 1):
@@ -85,6 +96,12 @@ def generate_comic(script: str, style: str) -> list[dict]:
                                     print(f"  Init state saved to {init_path}")
                                     response_data["init_state_path"] = str(init_path)
                                     init_saved = True
+                                    
+                                    # Update prev_image to init state for the end state generation
+                                    prev_image = {
+                                        "data": init_result["image_data"],
+                                        "mime_type": init_result["mime_type"]
+                                    }
                                     break
                     except IOError as e:
                         print(f"  IO Error saving init state: {str(e)}")
@@ -95,12 +112,14 @@ def generate_comic(script: str, style: str) -> list[dict]:
                 if attempt >= max_generation_retries:
                     response_data["init_state_error"] = str(e)
         
-        # Generate END STATE image
+        # Generate END STATE image using current prev_image (which is now the init state)
         print(f"  Generating end state for panel {index + 1}...")
         end_instruction = dict(instruction)
+        
+        # Use the current prev_image which should be the init state if it was generated successfully
         if prev_image:
             end_instruction["prev_image"] = prev_image
-            end_instruction["instructions"] = f"Continue from previous panel. {end_instruction['instructions']}"
+            end_instruction["instructions"] = f"Continue from this exact scene with minimal change. {end_instruction['instructions']}"
         
         end_saved = False
         end_image_data = None
@@ -142,7 +161,8 @@ def generate_comic(script: str, style: str) -> list[dict]:
                 if attempt >= max_generation_retries:
                     response_data["end_state_error"] = str(e)
         
-        # Use end state as prev_image for next panel (for continuity)
+        # Update prev_image to end state for next panel's init state
+        # This creates the chain: init -> end -> next panel's init -> next panel's end
         if end_saved and end_image_data:
             prev_image = {
                 "data": end_image_data,
@@ -152,6 +172,26 @@ def generate_comic(script: str, style: str) -> list[dict]:
         # Set overall status
         if init_saved and end_saved:
             response_data["status"] = "success"
+            
+            # Schedule movie generation asynchronously if both states were saved
+            if "init_state_path" in response_data and "end_state_path" in response_data:
+                print(f"  Scheduling movie generation for panel {index + 1}...")
+                
+                # Submit movie generation task to thread pool
+                movie_future = executor.submit(
+                    generate_movie_from_panels,
+                    response_data["init_state_path"],
+                    response_data["end_state_path"],
+                    instruction["instructions"],  # Motion description
+                    str(output_dir / f"panel_{index + 1:03d}_movie.mp4")
+                )
+                
+                # Store task info
+                movie_tasks.append({
+                    "panel_number": index + 1,
+                    "future": movie_future
+                })
+                
         elif init_saved or end_saved:
             response_data["status"] = "partial_success"
         else:
@@ -160,6 +200,37 @@ def generate_comic(script: str, style: str) -> list[dict]:
         
         comic.append(response_data)
     
+    # Wait for all movie generation tasks to complete
+    print(f"\nWaiting for {len(movie_tasks)} movie generation tasks to complete...")
+    
+    for task in movie_tasks:
+        try:
+            # Get result with timeout
+            movie_result = task["future"].result(timeout=300)  # 5 minute timeout per movie
+            
+            # Add movie result to corresponding panel in comic
+            panel_idx = task["panel_number"] - 1
+            if panel_idx < len(comic):
+                comic[panel_idx]["movie"] = movie_result
+                
+            if movie_result["status"] == "success":
+                print(f"  ✓ Panel {task['panel_number']} movie completed: {movie_result['movie_path']}")
+            else:
+                print(f"  ✗ Panel {task['panel_number']} movie failed: {movie_result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            print(f"  ✗ Panel {task['panel_number']} movie generation error: {str(e)}")
+            panel_idx = task["panel_number"] - 1
+            if panel_idx < len(comic):
+                comic[panel_idx]["movie"] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+    
+    # Shutdown executor
+    executor.shutdown(wait=False)
+    
+    print(f"\nComic generation complete. Output directory: {output_dir}")
     return comic
 
 def generate_panel_instructions(script: str, style: str) -> list[PanelInstruction]:
@@ -372,7 +443,7 @@ def generate_panels(panel_instruction: PanelInstruction):
             print(f"Downloading image from: {image_url}")
             
             # Retry logic for downloading image
-            max_retries = 3
+            max_retries = 5
             retry_count = 0
             image_response = None
             

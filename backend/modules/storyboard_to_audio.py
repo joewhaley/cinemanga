@@ -445,8 +445,147 @@ class ElevenSDKWrapper:
         ok, content, err = rest_request_with_retries(self.rest_url, headers, payload)
         return ok, content, err
 
-# ------------------ Main ------------------
-def main():
+# ------------------ API Integration ------------------
+def generate_audio_from_script(script: str, 
+                              output_dir: str = "audio_assets",
+                              panels_filter: Optional[str] = None,
+                              audio_types: str = "music,sfx",
+                              config: Optional[AudioGenerationConfig] = None) -> List[Dict[str, Any]]:
+    """
+    Generate audio files from a script string (API-compatible version)
+    
+    Args:
+        script: The storyboard script text
+        output_dir: Directory to save audio files (relative to backend/)
+        panels_filter: Optional panel range filter like "1-6,9,12-14"
+        audio_types: Types to generate: "music", "sfx", or "music,sfx"
+        config: Optional custom configuration
+        
+    Returns:
+        List of generated audio file information
+    """
+    if not script or not script.strip():
+        raise ValueError("Script cannot be empty")
+    
+    # Use provided config or global CONFIG
+    cfg = config or CONFIG
+    
+    # Ensure output directory exists
+    output_path = Path(output_dir)
+    ensure_outdir(output_path)
+    
+    # ---- Gemini (google-genai) ----
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError as e:
+        raise RuntimeError("google-genai not installed. Run: pip install google-genai") from e
+
+    # Create Gemini client
+    client = genai.Client(api_key=cfg.gemini_api_key)
+    prompt = GEMINI_USER + script.strip() + "\n\nJSON ONLY."
+    
+    # Generate cue sheet
+    resp = client.models.generate_content(
+        model=cfg.gemini_model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=cfg.gemini_temperature,
+            max_output_tokens=cfg.gemini_max_tokens,
+            system_instruction=GEMINI_SYSTEM,
+            response_mime_type="application/json"
+        ),
+    )
+    
+    raw_text = getattr(resp, "text", "") or ""
+    json_text = extract_json_block(raw_text)
+
+    try:
+        cue_data = json.loads(json_text)
+        cue_sheet = CueSheet(**cue_data)
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise RuntimeError(f"Failed to parse/validate Gemini JSON: {e}") from e
+
+    # Filter panels if specified
+    wanted = parse_panel_range(panels_filter) if panels_filter else None
+    panels: List[PanelCue] = []
+    seen = set()
+    for p in cue_sheet.panels:
+        if p.panel_number in seen:
+            continue
+        seen.add(p.panel_number)
+        if wanted and p.panel_number not in wanted:
+            continue
+        panels.append(p)
+
+    # ---- ElevenLabs generation ----
+    kinds = [t.strip().lower() for t in audio_types.split(",") if t.strip() in ("music", "sfx")]
+    sdk = ElevenSDKWrapper(api_key=cfg.eleven_api_key, rest_url=cfg.eleven_api_url)
+
+    generated_files = []
+    
+    for p in panels:
+        panel_files = {"panel_number": p.panel_number, "title": p.title, "files": []}
+        
+        # MUSIC
+        if "music" in kinds and p.music:
+            fname = clip_filename(p.panel_number, "music", cfg.default_music_format, p.title)
+            fpath = output_path / fname
+            
+            ok, content, err = sdk.generate_bytes(
+                prompt=p.music.prompt, 
+                duration=p.music.duration, 
+                fmt=cfg.default_music_format
+            )
+            
+            if ok:
+                fpath.write_bytes(content)
+                panel_files["files"].append({
+                    "type": "music",
+                    "filename": fname,
+                    "path": str(fpath),
+                    "prompt": p.music.prompt,
+                    "duration": p.music.duration,
+                    "format": cfg.default_music_format
+                })
+            else:
+                print(f"[error] panel {p.panel_number:02d} music: {err}")
+            
+            time.sleep(cfg.rate_limit_sleep)
+
+        # SFX
+        if "sfx" in kinds and p.sfx:
+            fname = clip_filename(p.panel_number, "sfx", cfg.default_sfx_format, p.title)
+            fpath = output_path / fname
+            
+            ok, content, err = sdk.generate_bytes(
+                prompt=p.sfx.prompt, 
+                duration=p.sfx.duration, 
+                fmt=cfg.default_sfx_format
+            )
+            
+            if ok:
+                fpath.write_bytes(content)
+                panel_files["files"].append({
+                    "type": "sfx",
+                    "filename": fname,
+                    "path": str(fpath),
+                    "prompt": p.sfx.prompt,
+                    "duration": p.sfx.duration,
+                    "format": cfg.default_sfx_format
+                })
+            else:
+                print(f"[error] panel {p.panel_number:02d} sfx: {err}")
+            
+            time.sleep(cfg.rate_limit_sleep)
+        
+        if panel_files["files"]:  # Only add if files were generated
+            generated_files.append(panel_files)
+
+    return generated_files
+
+# ------------------ Main CLI ------------------
+def generate_audio_from_storyboard():
     parser = argparse.ArgumentParser(description="Storyboard → Gemini (google-genai) → ElevenLabs SDK/REST")
     parser.add_argument("--storyboard", type=str, default=None, help="Path to storyboard .txt (or pass via stdin).")
     parser.add_argument("--out", type=str, default=CONFIG.default_output_dir, help="Output directory.")
@@ -560,4 +699,4 @@ def main():
             print(f" - Panel {f['panel']:02d} {f['kind']}: {f['error']}")
 
 if __name__ == "__main__":
-    main()
+    generate_audio_from_storyboard()

@@ -41,22 +41,29 @@ async def generate_comic_draft(request: ComicDraftRequest):
 
 @router.post("/generate-audio-cues")
 async def generate_audio_cues(request: ComicDraftRequest):
-    audio_files = generate_audio_from_storyboard(request.script)
-    return {"audio_files": audio_files, "status": "success"}
+    try:
+        audio_files = generate_audio_from_storyboard(request.script)
+        return {"audio_files": audio_files, "status": "success"}
+    except Exception as e:
+        return {"error": str(e), "status": "error"}
 
 
 # full multimedia comic
 @router.post("/generate-multimedia-comic")
 async def generate_multimedia_comic(request: ComicDraftRequest):
-    # Parallel generation
-    panels = generate_comic(request.script, request.style)
-    audio = generate_audio_from_storyboard(request.script)
-    
-    return {
-        "panels": panels,
-        "audio": audio,
-        "type": "multimedia_comic"
-    }
+    try:
+        # Parallel generation
+        panels = generate_comic(request.script, request.style)
+        audio = generate_audio_from_storyboard(request.script)
+        
+        return {
+            "panels": panels,
+            "audio": audio,
+            "type": "multimedia_comic",
+            "status": "success"
+        }
+    except Exception as e:
+        return {"error": str(e), "status": "error"}
 
 @router.get("/health")
 async def health_check():

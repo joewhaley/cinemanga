@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from modules.comic_generator import generate_comic
+from modules.comic_generator import generate_comic, generate_panel_instructions
 from modules.storyboard_to_audio import generate_audio_from_storyboard
 
 router = APIRouter()
@@ -42,7 +42,8 @@ async def generate_comic_draft(request: ComicDraftRequest):
 @router.post("/generate-audio-cues")
 async def generate_audio_cues(request: ComicDraftRequest):
     try:
-        audio_files = generate_audio_from_storyboard(request.script)
+        panel_instructions = generate_panel_instructions(request.script, request.style)
+        audio_files = generate_audio_from_storyboard(panel_instructions)
         return {"audio_files": audio_files, "status": "success"}
     except Exception as e:
         return {"error": str(e), "status": "error"}
@@ -53,8 +54,9 @@ async def generate_audio_cues(request: ComicDraftRequest):
 async def generate_multimedia_comic(request: ComicDraftRequest):
     try:
         # Parallel generation
+        panel_instructions = generate_panel_instructions(request.script, request.style)
         panels = generate_comic(request.script, request.style)
-        audio = generate_audio_from_storyboard(request.script)
+        audio = generate_audio_from_storyboard(panel_instructions)
         
         return {
             "panels": panels,

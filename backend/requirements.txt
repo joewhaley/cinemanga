@@ -2,3 +2,5 @@ fastapi==0.115.0
 uvicorn[standard]==0.32.0
 google-genai
 debugpy==1.8.0
+fal-client
+python-dotenv

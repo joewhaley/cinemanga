@@ -44,18 +44,26 @@ class FALSceneDetector:
             print(f"Error uploading video: {e}")
             raise
     
-    def analyze_video_scenes(self, video_url: str, detailed_analysis: bool = True) -> Dict:
+    def analyze_video_scenes(self, video_input: str, detailed_analysis: bool = True) -> Dict:
         """
         Analyze video content using FAL AI's video understanding API
         
         Args:
-            video_url: URL of the uploaded video
+            video_input: URL of the uploaded video or local file path
             detailed_analysis: Whether to request detailed analysis
             
         Returns:
             Dictionary containing the analysis results
         """
         print("Analyzing video with FAL AI...")
+        
+        # Check if input is a local file path or URL
+        if os.path.exists(video_input):
+            print(f"Local file detected, uploading: {video_input}")
+            video_url = self.upload_video(video_input)
+        else:
+            print(f"URL detected, using directly: {video_input}")
+            video_url = video_input
         
         # Define prompts for comprehensive scene analysis
         prompts = [

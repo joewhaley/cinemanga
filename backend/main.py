@@ -40,11 +40,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(comic_router, prefix="/api")
+# Include the comic generation router
+app.include_router(router)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Mount comic output files
+app.mount("/comic-output", StaticFiles(directory="output"), name="comic-output")
 
 # Global storage for processing results
 processing_results = {}

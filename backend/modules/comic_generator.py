@@ -250,7 +250,6 @@ Each panel must have:
 - narrative: SHORT and CRISP text describing action or dialogue for this panel:
   * Character dialogue (e.g., "I'll never give up!")
   * Action descriptions (e.g., "He leaps through the window")
-  * Sound effects (e.g., "CRASH!" or "swoosh")
   * Brief narration when needed (e.g., "Meanwhile, across town...")
   * Keep it concise - like comic book text
   * Can combine multiple elements (e.g., "Watch out!" she yelled as the door exploded.)

@@ -53,8 +53,33 @@ backend/main.py-backup
 *.log
 logs/
 
+<<<<<<< Updated upstream
 # Test outputs
 test_*/
 *_test_output/
 *_scenes/
 *_frames/
+=======
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Media files
+*.avi
+*.mov
+*.mkv
+*.webm
+frames/
+temp/
+
+# Database
+*.db
+*.sqlite3
+
+# Node (if frontend added later)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+>>>>>>> Stashed changes

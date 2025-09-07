@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from modules.comic_generator import generate_comic, generate_panel_instructions
 from modules.storyboard_to_audio import generate_audio_from_panel_instructions
+from modules.audio_mixer import create_audio_mixed_panels
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ async def generate_multimedia_comic(request: ComicDraftRequest):
         
         # Step 3: Generate audio (music, SFX, narrative)
         step3_start = time.time()
-        logger.info("🎵 Step 3/3: Generating audio files (music, SFX, narrative)...")
+        logger.info("🎵 Step 3/4: Generating audio files (music, SFX, narrative)...")
         audio_result = generate_audio_from_panel_instructions(panel_instructions)
         audio_files_count = audio_result["total_panels"]
         audio_output_dir = audio_result["output_directory"]
@@ -106,13 +107,20 @@ async def generate_multimedia_comic(request: ComicDraftRequest):
         logger.info(f"✅ Generated audio for {audio_files_count} panels ({step3_time:.2f}s)")
         logger.info(f"📁 Audio files saved to: {audio_output_dir}")
         
+        # Step 4: Mix narrative audio into panel movies
+        step4_start = time.time()
+        logger.info("🎬 Step 4/4: Mixing narrative audio into panel movies...")
+        panels_with_audio = create_audio_mixed_panels(panels, audio_result["files"])
+        step4_time = time.time() - step4_start
+        logger.info(f"✅ Mixed audio into panel movies ({step4_time:.2f}s)")
+        
         total_time = time.time() - start_time
         logger.info("🎉 Multimedia comic generation completed successfully!")
         logger.info(f"📊 Summary: {panels_count} panels, {audio_files_count} audio sets")
-        logger.info(f"⏱️  Total time: {total_time:.2f}s (Instructions: {step1_time:.2f}s, Panels: {step2_time:.2f}s, Audio: {step3_time:.2f}s)")
+        logger.info(f"⏱️  Total time: {total_time:.2f}s (Instructions: {step1_time:.2f}s, Panels: {step2_time:.2f}s, Audio: {step3_time:.2f}s, Mixing: {step4_time:.2f}s)")
         
         return {
-            "panels": panels,
+            "panels": panels_with_audio,
             "audio": audio_result["files"],
             "output_directory": audio_result["output_directory"],
             "panel_count": len(panels) if panels else 0,

@@ -566,7 +566,7 @@
                                                             <div>
                                                                 <p className="text-xs text-gray-500 mb-1">Initial State:</p>
                                                                 <img 
-                                                                    src={`/comic-output/${panel.init_state_path.replace('backend/output/', '')}`}
+                                                                    src={`/comic-output/${panel.init_state_path.replace('output/', '')}`}
                                                                     alt={`Panel ${index + 1} - Initial`}
                                                                     className="w-full rounded-lg shadow-md"
                                                                     onError={(e) => {
@@ -585,7 +585,7 @@
                                                             <div>
                                                                 <p className="text-xs text-gray-500 mb-1">End State:</p>
                                                                 <img 
-                                                                    src={`/comic-output/${panel.end_state_path.replace('backend/output/', '')}`}
+                                                                    src={`/comic-output/${panel.end_state_path.replace('output/', '')}`}
                                                                     alt={`Panel ${index + 1} - End`}
                                                                     className="w-full rounded-lg shadow-md"
                                                                     onError={(e) => {
@@ -602,7 +602,7 @@
                                                         {/* Fallback for other image paths */}
                                                         {!panel.init_state_path && !panel.end_state_path && panel.file_path && (
                                                             <img 
-                                                                src={`/comic-output/${panel.file_path.replace('backend/output/', '')}`}
+                                                                src={`/comic-output/${panel.file_path.replace('output/', '')}`}
                                                                 alt={`Panel ${index + 1}`}
                                                                 className="w-full rounded-lg shadow-md"
                                                                 onError={(e) => {

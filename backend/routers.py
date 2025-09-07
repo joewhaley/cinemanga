@@ -1,7 +1,13 @@
+import logging
+import time
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from modules.comic_generator import generate_comic, generate_panel_instructions
 from modules.storyboard_to_audio import generate_audio_from_panel_instructions
+
+# Set up logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 router = APIRouter()
 
@@ -42,8 +48,19 @@ async def generate_comic_draft(request: ComicDraftRequest):
 @router.post("/generate-audio-cues")
 async def generate_audio_cues(request: ComicDraftRequest):
     try:
+        logger.info("🎵 Starting audio generation")
+        logger.info(f"📝 Script length: {len(request.script)} characters")
+        
+        logger.info("📋 Generating panel instructions...")
         panel_instructions = generate_panel_instructions(request.script, request.style)
+        panel_count = len(panel_instructions) if panel_instructions else 0
+        logger.info(f"✅ Generated {panel_count} panel instructions")
+        
+        logger.info("🎵 Generating audio files (music, SFX, narrative)...")
         audio_result = generate_audio_from_panel_instructions(panel_instructions)
+        logger.info(f"✅ Generated audio for {audio_result['total_panels']} panels")
+        logger.info(f"📁 Audio files saved to: {audio_result['output_directory']}")
+        
         return {
             "audio_files": audio_result["files"], 
             "output_directory": audio_result["output_directory"],
@@ -51,6 +68,7 @@ async def generate_audio_cues(request: ComicDraftRequest):
             "status": "success"
         }
     except Exception as e:
+        logger.error(f"❌ Audio generation failed: {str(e)}")
         return {"error": str(e), "status": "error"}
 
 
@@ -58,10 +76,41 @@ async def generate_audio_cues(request: ComicDraftRequest):
 @router.post("/generate-multimedia-comic")
 async def generate_multimedia_comic(request: ComicDraftRequest):
     try:
-        # Parallel generation
+        start_time = time.time()
+        logger.info("🎬 Starting multimedia comic generation")
+        logger.info(f"📝 Script length: {len(request.script)} characters")
+        logger.info(f"🎨 Style: {request.style}")
+        
+        # Step 1: Generate panel instructions
+        step1_start = time.time()
+        logger.info("📋 Step 1/3: Generating panel instructions...")
         panel_instructions = generate_panel_instructions(request.script, request.style)
+        panel_count = len(panel_instructions) if panel_instructions else 0
+        step1_time = time.time() - step1_start
+        logger.info(f"✅ Generated {panel_count} panel instructions ({step1_time:.2f}s)")
+        
+        # Step 2: Generate comic panels (visual content)
+        step2_start = time.time()
+        logger.info("🖼️  Step 2/3: Generating comic panels (this may take a while)...")
         panels = generate_comic(request.script, request.style)
+        panels_count = len(panels) if panels else 0
+        step2_time = time.time() - step2_start
+        logger.info(f"✅ Generated {panels_count} comic panels ({step2_time:.2f}s)")
+        
+        # Step 3: Generate audio (music, SFX, narrative)
+        step3_start = time.time()
+        logger.info("🎵 Step 3/3: Generating audio files (music, SFX, narrative)...")
         audio_result = generate_audio_from_panel_instructions(panel_instructions)
+        audio_files_count = audio_result["total_panels"]
+        audio_output_dir = audio_result["output_directory"]
+        step3_time = time.time() - step3_start
+        logger.info(f"✅ Generated audio for {audio_files_count} panels ({step3_time:.2f}s)")
+        logger.info(f"📁 Audio files saved to: {audio_output_dir}")
+        
+        total_time = time.time() - start_time
+        logger.info("🎉 Multimedia comic generation completed successfully!")
+        logger.info(f"📊 Summary: {panels_count} panels, {audio_files_count} audio sets")
+        logger.info(f"⏱️  Total time: {total_time:.2f}s (Instructions: {step1_time:.2f}s, Panels: {step2_time:.2f}s, Audio: {step3_time:.2f}s)")
         
         return {
             "panels": panels,
@@ -73,6 +122,8 @@ async def generate_multimedia_comic(request: ComicDraftRequest):
             "status": "success"
         }
     except Exception as e:
+        logger.error(f"❌ Multimedia comic generation failed: {str(e)}")
+        logger.error(f"🔍 Error details: {type(e).__name__}")
         return {"error": str(e), "status": "error"}
 
 @router.get("/health")

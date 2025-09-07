@@ -246,7 +246,7 @@ async def process_video_url_task(result_id: str, video_url: str):
         
         # Configure yt-dlp options
         ydl_opts = {
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+            'outtmpl': os.path.join(temp_dir, 'video.%(ext)s'),  # Use simple filename to avoid Unicode issues
             'format': 'best[height<=720]',  # Limit to 720p for faster processing
             'noplaylist': True,
         }
@@ -264,7 +264,15 @@ async def process_video_url_task(result_id: str, video_url: str):
             if not downloaded_files:
                 raise Exception("No video file was downloaded")
             
-            downloaded_file_path = os.path.join(temp_dir, downloaded_files[0])
+            original_file_path = os.path.join(temp_dir, downloaded_files[0])
+            
+            # Rename to a safe ASCII filename to avoid Unicode issues
+            safe_filename = "video.mp4"
+            downloaded_file_path = os.path.join(temp_dir, safe_filename)
+            
+            # Rename the file to avoid Unicode issues
+            if original_file_path != downloaded_file_path:
+                os.rename(original_file_path, downloaded_file_path)
         
         # Update status
         processing_results[result_id]["message"] = "Initializing FAL AI detector..."

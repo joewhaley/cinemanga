@@ -7,7 +7,6 @@ from modules.storyboard_to_audio import generate_audio_from_panel_instructions
 
 # Set up logger
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 router = APIRouter()
 

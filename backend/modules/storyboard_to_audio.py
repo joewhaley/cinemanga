@@ -835,7 +835,20 @@ def generate_audio_from_panel_instructions(panel_instructions: List[Dict[str, An
             music_sfx_cues = cue_sheet.panels
         except (json.JSONDecodeError, ValidationError) as e:
             print(f"[warn] Failed to parse Gemini JSON for music/SFX: {e}")
-            music_sfx_cues = []
+            print(f"[debug] Raw Gemini response: {raw_text[:500]}...")
+            print(f"[debug] Extracted JSON block: {json_text[:500]}...")
+            # Try to fix common JSON issues
+            try:
+                # Attempt basic JSON repair
+                fixed_json = json_text.replace("}\n{", "},{")  # Fix missing commas between objects
+                fixed_json = fixed_json.replace(",\n}", "}")   # Fix trailing commas
+                cue_data = json.loads(fixed_json)
+                cue_sheet = CueSheet(**cue_data)
+                music_sfx_cues = cue_sheet.panels
+                print(f"[info] Successfully repaired JSON and parsed music/SFX cues")
+            except Exception as repair_error:
+                print(f"[warn] JSON repair also failed: {repair_error}")
+                music_sfx_cues = []
 
     # Filter panels if specified
     wanted = parse_panel_range(panels_filter) if panels_filter else None

@@ -231,7 +231,41 @@ async def process_uploaded_video(result_id: str, video_path: str):
 
 async def process_video_url_task(result_id: str, video_url: str):
     """Background task to process video from URL"""
+    downloaded_file_path = None
     try:
+        # Update status
+        processing_results[result_id]["message"] = "Downloading video from URL..."
+        
+        # Download video using yt-dlp
+        import yt_dlp
+        import tempfile
+        import os
+        
+        # Create a temporary directory for downloads
+        temp_dir = tempfile.mkdtemp(prefix="cinemanga_download_")
+        
+        # Configure yt-dlp options
+        ydl_opts = {
+            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+            'format': 'best[height<=720]',  # Limit to 720p for faster processing
+            'noplaylist': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Get video info first
+            info = ydl.extract_info(video_url, download=False)
+            video_title = info.get('title', 'Unknown Video')
+            
+            # Download the video
+            ydl.download([video_url])
+            
+            # Find the downloaded file
+            downloaded_files = [f for f in os.listdir(temp_dir) if f.endswith(('.mp4', '.mkv', '.webm', '.avi', '.mov'))]
+            if not downloaded_files:
+                raise Exception("No video file was downloaded")
+            
+            downloaded_file_path = os.path.join(temp_dir, downloaded_files[0])
+        
         # Update status
         processing_results[result_id]["message"] = "Initializing FAL AI detector..."
         
@@ -241,8 +275,8 @@ async def process_video_url_task(result_id: str, video_url: str):
         # Update status
         processing_results[result_id]["message"] = "Analyzing video with FAL AI..."
         
-        # Analyze video directly from URL
-        analysis_results = detector.analyze_video_scenes(video_url, detailed_analysis=True)
+        # Analyze the downloaded video file
+        analysis_results = detector.analyze_video_scenes(downloaded_file_path, detailed_analysis=True)
         
         # Extract scenes
         scenes = detector.extract_scene_timestamps(analysis_results)
@@ -252,7 +286,7 @@ async def process_video_url_task(result_id: str, video_url: str):
             "result_id": result_id,
             "status": "completed",
             "message": "Analysis completed successfully",
-            "video_name": "URL Video",
+            "video_name": video_title,
             "video_url": video_url,
             "analysis_results": analysis_results,
             "extracted_scenes": scenes,
@@ -263,8 +297,19 @@ async def process_video_url_task(result_id: str, video_url: str):
     except Exception as e:
         processing_results[result_id].update({
             "status": "error",
-            "message": f"Processing failed: {str(e)}"
+            "message": f"URL processing failed: {str(e)}"
         })
+    finally:
+        # Clean up downloaded file
+        if downloaded_file_path and os.path.exists(downloaded_file_path):
+            try:
+                os.remove(downloaded_file_path)
+                # Also remove the temp directory if it's empty
+                temp_dir = os.path.dirname(downloaded_file_path)
+                if os.path.exists(temp_dir) and not os.listdir(temp_dir):
+                    os.rmdir(temp_dir)
+            except Exception as cleanup_error:
+                print(f"Warning: Failed to clean up downloaded file: {cleanup_error}")
 
 @app.get("/api/health")
 async def health_check():

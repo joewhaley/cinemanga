@@ -26,3 +26,6 @@ python-multipart
 # Comic generation dependencies
 python-slugify
 elevenlabs
+
+# Video download
+yt-dlp

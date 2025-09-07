@@ -14,3 +14,6 @@ python-multipart
 requests
 python-slugify
 pydantic
+
+# Video download
+yt-dlp

@@ -21,11 +21,15 @@ import uvicorn
 
 # Import the FAL scene detector
 from modules.fal_scene_detector import FALSceneDetector
+from routers import router
 
 # Import the comic generation router
 from routers import router as comic_router
 
 app = FastAPI(title="Cinemanga API", version="1.0.0")
+
+# Include the comic generation router
+app.include_router(router)
 
 # Enable CORS for frontend
 app.add_middleware(

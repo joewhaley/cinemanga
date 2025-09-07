@@ -22,3 +22,7 @@ requests==2.32.5
 pathlib2==2.3.7
 
 python-multipart
+
+# Comic generation dependencies
+python-slugify
+elevenlabs

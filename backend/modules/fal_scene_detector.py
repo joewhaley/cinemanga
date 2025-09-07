@@ -60,9 +60,9 @@ class FALSceneDetector:
         # Define prompts for comprehensive scene analysis
         prompts = [
             "Describe the main scenes and key moments in this video. Include timestamps if possible.",
-            "What are the main visual elements, settings, and characters in this video?",
-            "Describe the narrative flow and any significant transitions or scene changes.",
-            "What is the overall mood, atmosphere, and visual style of this video?"
+            #"What are the main visual elements, settings, and characters in this video?",
+            #"Describe the narrative flow and any significant transitions or scene changes.",
+            #"What is the overall mood, atmosphere, and visual style of this video?"
         ]
         
         all_results = []

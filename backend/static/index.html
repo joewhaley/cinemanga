@@ -704,17 +704,17 @@
                                                     </div>
                                                     
                                                     {/* Audio Player */}
-                                                    {comicData.audio && comicData.audio[index] && (
+                                                    {comicData.audio && comicData.audio[index] && comicData.audio[index].files && (
                                                         <div>
                                                             <h4 className="text-sm font-medium text-gray-600 mb-2">Audio:</h4>
                                                             <div className="space-y-2">
-                                                                {Object.entries(comicData.audio[index]).map(([audioType, audioFile]) => (
-                                                                    <div key={audioType} className="flex items-center space-x-3">
+                                                                {comicData.audio[index].files.map((audioFile, audioIndex) => (
+                                                                    <div key={audioIndex} className="flex items-center space-x-3">
                                                                         <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                                                                            {audioType}
+                                                                            {audioFile.type}
                                                                         </span>
                                                                         <audio controls className="flex-1">
-                                                                            <source src={audioFile} type="audio/mpeg" />
+                                                                            <source src={`/audio-assets/${audioFile.path}`} type="audio/mpeg" />
                                                                             Your browser does not support the audio element.
                                                                         </audio>
                                                                     </div>

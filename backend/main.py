@@ -44,10 +44,13 @@ app.add_middleware(
 app.include_router(router)
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="static"))
 
 # Mount comic output files
-app.mount("/comic-output", StaticFiles(directory="output"), name="comic-output")
+app.mount("/comic-output", StaticFiles(directory="output"))
+
+# Mount audio assets files
+app.mount("/audio-assets", StaticFiles(directory="."))
 
 # Global storage for processing results
 processing_results = {}

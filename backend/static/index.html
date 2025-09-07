@@ -315,6 +315,7 @@
             const [error, setError] = useState(null);
             const [comicData, setComicData] = useState(null);
             const [generatingComic, setGeneratingComic] = useState(false);
+            const [comicStyle, setComicStyle] = useState("Cartoony-style");
 
             useEffect(() => {
                 fetchResults();
@@ -350,7 +351,7 @@
                         },
                         body: JSON.stringify({
                             script: script,
-                            style: "cinematic, dramatic, high-quality digital art"
+                            style: comicStyle
                         }),
                     });
 
@@ -503,6 +504,25 @@
                                     </p>
                                 </div>
                             )}
+                            
+                            {/* Style Input */}
+                            <div className="mb-4">
+                                <label htmlFor="comic-style" className="block text-sm font-medium text-gray-600 mb-2">
+                                    Comic Style:
+                                </label>
+                                <input
+                                    type="text"
+                                    id="comic-style"
+                                    value={comicStyle}
+                                    onChange={(e) => setComicStyle(e.target.value)}
+                                    placeholder="Enter comic style (e.g., Cartoony-style, Cinematic, Anime, etc.)"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    disabled={generatingComic}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Describe the visual style you want for your comic panels
+                                </p>
+                            </div>
                         </div>
 
                         {/* Comic Display */}

@@ -363,9 +363,9 @@ graph LR
     end
     
     subgraph "API Endpoints"
-        D1[/api/generate-multimedia-comic]
-        D2[/api/upload & /api/process-url]
-        D3[/api/generate-audio-cues]
+        D1["/api/generate-multimedia-comic"]
+        D2["/api/upload + /api/process-url"]
+        D3["/api/generate-audio-cues"]
     end
     
     subgraph "Output"

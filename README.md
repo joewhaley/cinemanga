@@ -32,7 +32,7 @@ graph TD
     G2 --> H
     G3 --> H
     
-    H --> I[🎭 Final Manga Movie]
+    H --> I[🎭 Final Movie]
     
     style A fill:#e1f5fe
     style I fill:#e8f5e8

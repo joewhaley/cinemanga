@@ -2,82 +2,100 @@
 
 **Transform content into cinematic experiences with AI**
 
-Cinemanga is a comprehensive AI-powered platform that offers multiple content transformation capabilities:
-- **Script-to-Comic**: Convert screenplay scripts into dynamic manga-style comics with synchronized audio
-- **Video Analysis**: Extract scenes and understand video content using advanced AI
-- **Panel Animation**: Generate smooth transitions between comic panel states
-- **Video-to-Manga Pipeline**: Transform existing videos into stylized manga movies with enhanced audio
+Cinemanga is a comprehensive AI-powered platform that combines cutting-edge AI models to create multimedia storytelling experiences:
+
+- **🎨 Script-to-Comic**: Convert screenplay scripts into dynamic manga-style comics using FAL AI's nano-banana model
+- **🎵 Synchronized Audio**: Generate contextual music, sound effects, and narrative voice-over with ElevenLabs
+- **🧠 Intelligent Analysis**: Advanced script understanding and scene breakdown with Google Gemini
+- **📹 Video Analysis**: Extract scenes and understand video content using FAL AI's video understanding
+- **🎬 Panel Animation**: Generate smooth transitions between comic panel states
+- **🔗 Integrated Pipeline**: Seamless connection between visual generation, audio synthesis, and content analysis
 
 ## 🔄 Complete Pipeline Overview
 
 ```mermaid
 graph TD
-    A[📹 Input Video] --> B[🎥 FAL Video Analysis]
-    B --> C[📋 Scene Detection & Timestamps]
-    C --> D[📝 Scene Descriptions]
-    D --> E[🎨 Style Modification]
-    E --> F[🖼️ Panel Generation]
-    E --> G[🎵 Audio Generation]
+    A[📝 Script Input] --> B[🧠 Gemini Analysis]
+    B --> C[📋 Panel Instructions]
+    C --> D[🍌 FAL Nano-Banana]
+    D --> E[🖼️ Manga Panels]
     
-    F --> F1[Init State Images]
-    F --> F2[End State Images]
+    C --> F[🧠 Gemini Audio Cues]
+    F --> G[🎵 ElevenLabs Audio]
+    
+    H[📹 Video Input] --> I[🎥 FAL Video Analysis]
+    I --> J[📊 Scene Extraction]
+    J --> K[📝 Scene Descriptions]
+    K --> B
+    
+    E --> L[🎬 Multimedia Comic]
+    G --> L
     
     G --> G1[🎼 Background Music]
     G --> G2[🔊 Sound Effects]
     G --> G3[🗣️ Narrative Voice]
     
-    F1 --> H[🎬 Movie Generation]
-    F2 --> H
-    G1 --> H
-    G2 --> H
-    G3 --> H
-    
-    H --> I[🎭 Final Movie]
-    
-    style A fill:#e1f5fe
-    style I fill:#e8f5e8
-    style B fill:#fff3e0
-    style F fill:#f3e5f5
+    style D fill:#fff3e0,stroke:#ff9800,stroke-width:3px
+    style B fill:#e3f2fd
     style G fill:#fff8e1
-    style H fill:#fce4ec
+    style L fill:#e8f5e8
+    style I fill:#f3e5f5
 ```
 
 ### Pipeline Stages:
 
-1. **🎥 Video Input & Analysis**: FAL AI processes the original video to understand scenes and content
-2. **📋 Scene Detection**: Extract key scenes with precise timestamps and descriptions
-3. **🎨 Style Modification**: Apply manga/anime styling preferences to scene descriptions
-4. **🖼️ Panel Generation**: Create manga-style panels for each scene (init/end states)
-5. **🎵 Audio Enhancement**: Generate contextual music, SFX, and narrative voice-over
-6. **🎬 Movie Synthesis**: Combine styled panels with enhanced audio into final cinematic experience
+#### **📝 Script-to-Comic Pipeline:**
+1. **🧠 Gemini Analysis**: Intelligent script parsing and panel instruction generation
+2. **🍌 FAL Nano-Banana**: High-quality manga-style image generation with panel continuity
+3. **🧠 Gemini Audio Cues**: Context-aware audio prompt generation for each panel
+4. **🎵 ElevenLabs Synthesis**: Multi-modal audio generation (music, SFX, voice narration)
+5. **🔗 Integration**: Synchronized multimedia comic with timestamped audio assets
+
+#### **📹 Video Analysis Pipeline:**
+1. **🎥 FAL Video Understanding**: Advanced scene detection and content analysis
+2. **📊 Scene Extraction**: Intelligent timestamp identification and scene breakdown
+3. **📝 Content Description**: AI-powered scene summarization and context understanding
+4. **🔄 Pipeline Integration**: Feed extracted scenes into script-to-comic pipeline
+
+#### **🎨 Visual Generation Features:**
+- **Panel Continuity**: nano-banana/edit mode maintains visual consistency between panels
+- **Style Adaptation**: Manga/anime styling with dramatic shading and composition
+- **Sequential Generation**: Context-aware panel creation using previous panel information
 
 ## ✨ Features
 
-### 🖼️ **Visual Generation**
-- **Panel Instructions**: AI-generated detailed storyboard instructions for each panel
-- **Comic Panels**: High-quality manga-style image generation with dramatic shading
-- **Panel Animation**: Smooth transitions between init and end panel states using AI video generation
+### 🖼️ **Visual Generation (FAL AI Nano-Banana)**
+- **Manga-Style Generation**: Specialized model optimized for anime/manga art styles
+- **Panel Continuity**: Advanced edit mode maintains visual consistency across sequential panels
+- **Style Processing**: Handles complex style instructions (black & white, dramatic shading, composition)
+- **Context Awareness**: Uses previous panel information to create coherent visual narratives
+- **High-Quality Output**: Professional-grade manga artwork generation
 
-### 🎥 **Video Understanding**
-- **Scene Detection**: Intelligent extraction of key scenes from video content
-- **Timestamp Analysis**: Automatic identification of scene transitions with precise timing
-- **Content Summarization**: AI-powered analysis and description of video content
+### 🎥 **Video Understanding (FAL AI Video Analysis)**
+- **Advanced Scene Detection**: AI-powered extraction of key scenes with contextual understanding
+- **Timestamp Analysis**: Precise identification of scene transitions and important moments
+- **Content Summarization**: Intelligent analysis and description of video narrative structure
 - **Multiple Format Support**: Process various video formats (MP4, AVI, MOV, MKV, WebM, etc.)
+- **Real-time Processing**: Background analysis with status updates and progress tracking
 
-### 🎵 **Audio Generation**
-- **Music**: Contextual background music for each panel
-- **Sound Effects**: Scene-appropriate SFX (footsteps, explosions, ambient sounds)
-- **Narrative Audio**: Text-to-speech with intelligent voice selection:
-  - Elderly characters → Elderly voice
-  - Female characters → Female voice  
-  - Male characters → Male voice
-  - Narrator/SFX → Narrator voice
+### 🎵 **Audio Generation (ElevenLabs + Gemini)**
+- **Context-Aware Music**: Gemini analyzes panel mood to generate appropriate background music prompts
+- **Dynamic Sound Effects**: Scene-appropriate SFX generation (footsteps, explosions, ambient sounds)
+- **Intelligent Voice Narration**: Automatic voice selection and text-to-speech:
+  - Elderly characters → Elderly voice profile
+  - Female characters → Female voice profile  
+  - Male characters → Male voice profile
+  - Narrator/SFX → Professional narrator voice
+- **Synchronized Output**: Timestamped audio files that align with visual panels
+- **Multi-Format Support**: Configurable output formats (MP3, WAV, etc.) for different use cases
 
-### 🎭 **Intelligent Processing**
-- **Script Analysis**: Converts screenplays into structured panel sequences
-- **Scene Understanding**: AI interprets visual and emotional context
-- **Voice Selection**: Automatic character voice assignment based on narrative content
-- **Timestamped Output**: Organized file structure with timestamps
+### 🎭 **Intelligent Processing (Google Gemini)**
+- **Advanced Script Analysis**: Converts screenplays into detailed, structured panel sequences
+- **Contextual Understanding**: AI interprets visual, emotional, and narrative context
+- **Audio Cue Generation**: Analyzes scene context to create appropriate music and SFX prompts
+- **Voice Assignment Logic**: Automatic character voice selection based on narrative content analysis
+- **Panel Instruction Generation**: Creates detailed visual instructions for manga panel creation
+- **Pydantic Configuration**: Type-safe, validated configuration management with environment variable support
 
 ## 🚀 Quick Start
 
@@ -86,8 +104,8 @@ graph TD
 - Docker & Docker Compose
 - API Keys:
   - **Google Gemini API Key** (for script analysis and audio cue generation)
-  - **ElevenLabs API Key** (for audio generation)
-  - **FAL AI API Key** (for image generation)
+  - **ElevenLabs API Key** (for audio synthesis - music, SFX, voice narration)
+  - **FAL AI API Key** (for nano-banana image generation and video analysis)
 
 ### 1. Clone Repository
 
@@ -119,11 +137,19 @@ DEFAULT_NARRATIVE_FORMAT=mp3
 VOICE_STABILITY=0.5
 VOICE_SIMILARITY_BOOST=0.5
 
-# Voice IDs (Optional - uses defaults if not provided)
+# Voice Configuration (Optional - uses defaults if not provided)
 DEFAULT_NARRATOR_VOICE=pNInz6obpgDQGcFmaJgB
 DEFAULT_MALE_VOICE=TxGEqnHWrfWFTfGW9XjX
 DEFAULT_FEMALE_VOICE=21m00Tcm4TlvDq8ikWAM
 DEFAULT_ELDERLY_VOICE=VR6AewLTigWG4xSOukaG
+VOICE_STABILITY=0.5
+VOICE_SIMILARITY_BOOST=0.5
+
+# ElevenLabs API Configuration
+ELEVEN_TTS_URL=https://api.elevenlabs.io/v1/text-to-speech
+
+# Output Format Configuration
+DEFAULT_NARRATIVE_FORMAT=mp3
 ```
 
 ### 3. Run with Docker
@@ -154,11 +180,11 @@ docker-compose logs --tail=100 backend
 
 #### Generate Multimedia Comic
 
-**Endpoint:** `POST /api/generate-multimedia-comic`
+**Endpoint:** `POST /generate-multimedia-comic`
 
 ```bash
 curl -X 'POST' \
-  'http://localhost:8000/api/generate-multimedia-comic' \
+  'http://localhost:8000/generate-multimedia-comic' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -170,9 +196,32 @@ curl -X 'POST' \
 **Response:**
 ```json
 {
-  "panels": [...],
-  "audio": [...],
-  "output_directory": "/app/audio-assets-20241220-143052",
+  "panels": [
+    {
+      "panel_number": 1,
+      "instructions": "Hero standing on cliff...",
+      "init_state_instructions": "Hero standing still...",
+      "narrative": "A hero contemplates the city below",
+      "image_url": "https://fal.media/files/...",
+      "movie": {
+        "status": "success",
+        "movie_path": "./output/comic_20241220_143052/panel_01_movie.mp4",
+        "movie_url": "https://fal.media/files/..."
+      },
+      "status": "success"
+    }
+  ],
+  "audio": [
+    {
+      "panel_number": 1,
+      "files": [
+        {"type": "music", "path": "./audio-assets-20241220-143052/panel01_music.mp3"},
+        {"type": "sfx", "path": "./audio-assets-20241220-143052/panel01_sfx.wav"},
+        {"type": "narrative", "path": "./audio-assets-20241220-143052/panel01_narrative.mp3"}
+      ]
+    }
+  ],
+  "output_directory": "./audio-assets-20241220-143052",
   "panel_count": 3,
   "audio_files_count": 3,
   "type": "multimedia_comic",
@@ -182,30 +231,30 @@ curl -X 'POST' \
 
 #### Generate Audio Only
 
-**Endpoint:** `POST /api/generate-audio-cues`
+**Endpoint:** `POST /generate-audio-cues`
 
 ```bash
 curl -X 'POST' \
-  'http://localhost:8000/api/generate-audio-cues' \
+  'http://localhost:8000/generate-audio-cues' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
-  "script": "Your script here...",
+  "script": "FADE IN: A hero stands on a cliff at sunset.",
   "style": "manga style"
 }'
 ```
 
-#### Generate Comic Only
+#### Generate Comic Only (Visual Panels)
 
-**Endpoint:** `POST /api/generate-comic-draft`
+**Endpoint:** `POST /generate-comic-draft`
 
 ```bash
 curl -X 'POST' \
-  'http://localhost:8000/api/generate-comic-draft' \
+  'http://localhost:8000/generate-comic-draft' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
-  "script": "Your script here...",
+  "script": "FADE IN: A hero stands on a cliff at sunset.",
   "style": "manga style"
 }'
 ```
@@ -307,14 +356,17 @@ audio-assets-20241220-143052/
 cinemanga/
 ├── backend/                 # FastAPI backend
 │   ├── modules/            # Core functionality
-│   │   ├── comic_generator.py      # Panel generation & instructions
-│   │   ├── storyboard_to_audio.py  # Audio generation (music, SFX, TTS)
-│   │   ├── movie_generator.py      # Panel animation generation
+│   │   ├── comic_generator.py      # Panel generation & FAL nano-banana integration
+│   │   ├── storyboard_to_audio.py  # Audio generation (Gemini + ElevenLabs)
+│   │   ├── movie_generator.py      # Panel animation via FAL AI
+│   │   ├── audio_mixer.py          # Audio-video synchronization
 │   │   └── fal_scene_detector.py   # Video analysis & scene detection
 │   ├── routers.py          # Comic generation API endpoints
 │   ├── main.py            # FastAPI application with video analysis endpoints
+│   ├── static/            # Frontend HTML interface
 │   └── requirements.txt   # Python dependencies
 ├── compose.yaml           # Docker Compose configuration
+├── .env.example          # Environment configuration template
 └── README.md             # This file
 ```
 
@@ -403,10 +455,11 @@ graph LR
 ### Code Structure
 
 #### **Comic Generation Pipeline:**
-1. `generate_panel_instructions()` - Script → Panel instructions via Gemini
-2. `generate_comic()` - Panel instructions → Images via FAL AI
-3. `generate_audio_from_panel_instructions()` - Panel instructions → Audio via Gemini + ElevenLabs
-4. `generate_movie_from_panels()` - Panel transitions → Animation via FAL AI
+1. `generate_panel_instructions()` - Script → Detailed panel instructions via Gemini
+2. `generate_comic()` - Panel instructions → Manga images via FAL nano-banana
+3. `generate_movie_from_panels()` - Panel transitions → Smooth animations via FAL AI  
+4. `generate_audio_from_panel_instructions()` - Panel context → Audio assets via Gemini + ElevenLabs
+5. `create_audio_mixed_panels()` - Synchronize audio with panel movies
 
 #### **Video Analysis Pipeline:**
 1. `upload_video()` / `process_video_url()` - Upload or process video from URL
@@ -415,10 +468,11 @@ graph LR
 4. Background processing with real-time status updates
 
 #### **Audio Generation Components:**
-- **Music/SFX Cues**: Gemini analyzes script context to generate audio prompts
-- **Sound Generation**: ElevenLabs creates music and sound effects
-- **Text-to-Speech**: ElevenLabs converts narrative text to speech with voice selection
-- **Voice Selection**: `select_voice_for_narrative()` automatically chooses appropriate voices
+- **Music/SFX Cues**: Gemini analyzes panel context to generate audio prompts  
+- **Sound Generation**: ElevenLabs creates music and sound effects from AI-generated prompts
+- **Text-to-Speech**: ElevenLabs converts narrative text to speech with intelligent voice selection
+- **Voice Selection**: `select_voice_for_narrative()` automatically chooses voices based on character analysis
+- **Audio Synchronization**: `create_audio_mixed_panels()` combines narrative audio with panel movies
 
 ### Configuration
 
@@ -428,12 +482,34 @@ The system uses a Pydantic-based configuration system (`AudioGenerationConfig`) 
 - Validation and type checking
 - Testing configurations
 
+### Current Implementation Status
+
+#### ✅ **Fully Implemented Features:**
+- **Script-to-Comic Generation**: Complete pipeline from text to manga panels
+- **FAL Nano-Banana Integration**: High-quality manga-style image generation with panel continuity
+- **Audio Generation**: Music, SFX, and narrative voice generation via ElevenLabs
+- **Video Analysis**: Complete FAL AI video understanding and scene detection
+- **Panel Animation**: Smooth transitions between panel states via FAL AI movie generation
+- **Audio Synchronization**: Mixing narrative audio with panel movies
+- **Pydantic Configuration**: Type-safe, environment-based configuration management
+
+#### 🔗 **API Endpoints Available:**
+- `POST /generate-multimedia-comic` - Complete multimedia comic generation
+- `POST /generate-comic-draft` - Visual panel generation only
+- `POST /generate-audio-cues` - Audio asset generation only
+- `POST /api/upload` - Video file upload and analysis
+- `POST /api/process-url` - Video URL processing (YouTube, etc.)
+- `GET /api/status/{result_id}` - Processing status tracking
+- `GET /api/results/{result_id}` - Analysis results retrieval
+- `GET /health` - Health check endpoint
+
 ### Adding New Features
 
 1. **New Audio Types**: Extend the `audio_types` parameter in generation functions
 2. **Voice Selection**: Modify `select_voice_for_narrative()` for new voice logic
 3. **File Formats**: Add support in `validate_audio_formats()`
 4. **API Endpoints**: Add new routes in `routers.py`
+5. **Panel Effects**: Extend nano-banana integration for new visual styles
 
 ## 🎯 Use Cases
 

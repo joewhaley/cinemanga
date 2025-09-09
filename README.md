@@ -4,7 +4,7 @@
 
 Cinemanga is a comprehensive AI-powered platform that combines cutting-edge AI models to create multimedia storytelling experiences:
 
-- **🎨 Script-to-Comic**: Convert screenplay scripts into dynamic manga-style comics using FAL AI's nano-banana model
+- **🎨 Script-to-Comic**: Convert screenplay scripts into dynamic styled comics using FAL AI's nano-banana model
 - **🎵 Synchronized Audio**: Generate contextual music, sound effects, and narrative voice-over with ElevenLabs
 - **🧠 Intelligent Analysis**: Advanced script understanding and scene breakdown with Google Gemini
 - **📹 Video Analysis**: Extract scenes and understand video content using FAL AI's video understanding
@@ -18,7 +18,7 @@ graph TD
     A[📝 Script Input] --> B[🧠 Gemini Analysis]
     B --> C[📋 Panel Instructions]
     C --> D[🍌 FAL Nano-Banana]
-    D --> E[🖼️ Manga Panels]
+    D --> E[🖼️ Comic Panels]
     
     C --> F[🧠 Gemini Audio Cues]
     F --> G[🎵 ElevenLabs Audio]
@@ -46,7 +46,7 @@ graph TD
 
 #### **📝 Script-to-Comic Pipeline:**
 1. **🧠 Gemini Analysis**: Intelligent script parsing and panel instruction generation
-2. **🍌 FAL Nano-Banana**: High-quality manga-style image generation with panel continuity
+2. **🍌 FAL Nano-Banana**: High-quality custom-style image generation with panel continuity
 3. **🧠 Gemini Audio Cues**: Context-aware audio prompt generation for each panel
 4. **🎵 ElevenLabs Synthesis**: Multi-modal audio generation (music, SFX, voice narration)
 5. **🔗 Integration**: Synchronized multimedia comic with timestamped audio assets
@@ -59,17 +59,17 @@ graph TD
 
 #### **🎨 Visual Generation Features:**
 - **Panel Continuity**: nano-banana/edit mode maintains visual consistency between panels
-- **Style Adaptation**: Manga/anime styling with dramatic shading and composition
+- **Style Adaptation**: custom styling with dramatic shading and composition
 - **Sequential Generation**: Context-aware panel creation using previous panel information
 
 ## ✨ Features
 
 ### 🖼️ **Visual Generation (FAL AI Nano-Banana)**
-- **Manga-Style Generation**: Specialized model optimized for anime/manga art styles
+- **Style Generation**: Specialized model optimized for image gen
 - **Panel Continuity**: Advanced edit mode maintains visual consistency across sequential panels
 - **Style Processing**: Handles complex style instructions (black & white, dramatic shading, composition)
 - **Context Awareness**: Uses previous panel information to create coherent visual narratives
-- **High-Quality Output**: Professional-grade manga artwork generation
+- **High-Quality Output**: Professional-grade artwork generation
 
 ### 🎥 **Video Understanding (FAL AI Video Analysis)**
 - **Advanced Scene Detection**: AI-powered extraction of key scenes with contextual understanding
@@ -94,7 +94,7 @@ graph TD
 - **Contextual Understanding**: AI interprets visual, emotional, and narrative context
 - **Audio Cue Generation**: Analyzes scene context to create appropriate music and SFX prompts
 - **Voice Assignment Logic**: Automatic character voice selection based on narrative content analysis
-- **Panel Instruction Generation**: Creates detailed visual instructions for manga panel creation
+- **Panel Instruction Generation**: Creates detailed visual instructions for panel creation
 - **Pydantic Configuration**: Type-safe, validated configuration management with environment variable support
 
 ## 🚀 Quick Start
@@ -456,7 +456,7 @@ graph LR
 
 #### **Comic Generation Pipeline:**
 1. `generate_panel_instructions()` - Script → Detailed panel instructions via Gemini
-2. `generate_comic()` - Panel instructions → Manga images via FAL nano-banana
+2. `generate_comic()` - Panel instructions →  images via FAL nano-banana
 3. `generate_movie_from_panels()` - Panel transitions → Smooth animations via FAL AI  
 4. `generate_audio_from_panel_instructions()` - Panel context → Audio assets via Gemini + ElevenLabs
 5. `create_audio_mixed_panels()` - Synchronize audio with panel movies
@@ -485,8 +485,8 @@ The system uses a Pydantic-based configuration system (`AudioGenerationConfig`) 
 ### Current Implementation Status
 
 #### ✅ **Fully Implemented Features:**
-- **Script-to-Comic Generation**: Complete pipeline from text to manga panels
-- **FAL Nano-Banana Integration**: High-quality manga-style image generation with panel continuity
+- **Script-to-Comic Generation**: Complete pipeline from text to panels
+- **FAL Nano-Banana Integration**: High-quality style image generation with panel continuity
 - **Audio Generation**: Music, SFX, and narrative voice generation via ElevenLabs
 - **Video Analysis**: Complete FAL AI video understanding and scene detection
 - **Panel Animation**: Smooth transitions between panel states via FAL AI movie generation
@@ -635,11 +635,11 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 - **Google Gemini** for advanced script analysis and content understanding
 - **ElevenLabs** for high-quality audio generation and text-to-speech
-- **FAL AI** for manga-style image generation, video analysis, and animation
+- **FAL AI** for image generation, video analysis, and animation
 - **FastAPI** for the robust API framework and async processing
 
 ---
 
-**🎬 Ready to create your multimedia manga? Get started now!**
+**🎬 Ready to create your multimedia movies? Get started now!**
 
 For questions, issues, or contributions, please open an issue on GitHub.
